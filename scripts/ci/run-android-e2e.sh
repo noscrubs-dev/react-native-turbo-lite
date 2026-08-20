@@ -52,7 +52,7 @@ bun pm pack --ignore-scripts
 
 (
   cd example
-  bun install --frozen-lockfile --ignore-scripts
+  bun install --force --ignore-scripts
   NODE_ENV=production bun x expo prebuild --platform android --no-install --clean
   cd android
   NODE_ENV=production \

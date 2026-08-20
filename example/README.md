@@ -9,7 +9,7 @@ cd ..
 bun run build
 bun pm pack --ignore-scripts
 cd example
-bun install --frozen-lockfile
+bun install
 bun run android
 ```
 
