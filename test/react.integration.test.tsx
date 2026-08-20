@@ -97,6 +97,77 @@ describe("React root adapter integration", () => {
     });
   });
 
+  it("renders nothing for an unknown leaf and still reports it", async () => {
+    const errors: UnknownElementError[] = [];
+    const renderer = createComponentRenderer({ components: { Screen, Text } });
+    render(
+      <TurboLiteProvider
+        baseUrl="https://app.test"
+        fetch={async () =>
+          response("<Screen><Text>Visible</Text><FutureLeaf /></Screen>")
+        }
+        onError={(error) => {
+          if (error instanceof UnknownElementError) errors.push(error);
+        }}
+        renderer={renderer}
+      >
+        <TurboLiteScreen url="/future" />
+      </TurboLiteProvider>,
+    );
+    expect(await screen.findByText("Visible")).toBeTruthy();
+    await waitFor(() => expect(errors).toHaveLength(1));
+    expect(document.body.textContent).toBe("Visible");
+    expect(errors[0]?.tag).toBe("future-leaf");
+  });
+
+  it("targets the nearest Frame by default and honors _top", async () => {
+    function LinkButton({ children }: { children?: ReactNode }) {
+      const link = useTurboLiteLink();
+      return (
+        <button onClick={link.follow} type="button">
+          {children}
+        </button>
+      );
+    }
+    const renderer = createComponentRenderer({
+      components: {
+        LinkButton: LinkButton as ComponentType<Record<string, unknown>>,
+        Screen,
+        Text,
+      },
+    });
+    const calls: RequestInit[] = [];
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      calls.push(init);
+      if (calls.length === 1) {
+        return response(
+          '<Screen><turbo-frame id="panel"><a href="/frame"><LinkButton>Frame link</LinkButton></a><a href="/full" data-turbo-frame="_top"><LinkButton>Full link</LinkButton></a></turbo-frame></Screen>',
+        );
+      }
+      if (calls.length === 2) {
+        return response(
+          '<Screen><turbo-frame id="panel"><Text>Frame result</Text><a href="/full" data-turbo-frame="_top"><LinkButton>Full link</LinkButton></a></turbo-frame></Screen>',
+        );
+      }
+      return response("<Screen><Text>Full result</Text></Screen>");
+    });
+    render(
+      <TurboLiteProvider
+        baseUrl="https://app.test"
+        fetch={fetch}
+        renderer={renderer}
+      >
+        <TurboLiteScreen url="/cart" />
+      </TurboLiteProvider>,
+    );
+    fireEvent.click(await screen.findByText("Frame link"));
+    expect(await screen.findByText("Frame result")).toBeTruthy();
+    expect(new Headers(calls[1]?.headers).get("Turbo-Frame")).toBe("panel");
+    fireEvent.click(screen.getByText("Full link"));
+    expect(await screen.findByText("Full result")).toBeTruthy();
+    expect(new Headers(calls[2]?.headers).get("Turbo-Frame")).toBeNull();
+  });
+
   it("follows markup links and does not remount untouched stateful components", async () => {
     let mounts = 0;
     function Stateful() {
