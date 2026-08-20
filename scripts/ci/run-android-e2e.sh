@@ -17,7 +17,6 @@ export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 export MAESTRO_CLI_NO_ANALYTICS=1
 export MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
-export NODE_ENV=production
 
 readonly adb_serial="emulator-5580"
 readonly avd_name="expo-turbo-api35"
@@ -56,9 +55,10 @@ bun x --package "npm@${npm_version}" npm ci --prefix example --ignore-scripts --
 
 (
   cd example
-  bun x expo prebuild --platform android --no-install --clean
+  NODE_ENV=production bun x expo prebuild --platform android --no-install --clean
   cd android
-  ./gradlew --no-daemon -PreactNativeArchitectures=x86_64 app:assembleRelease
+  NODE_ENV=production \
+    ./gradlew --no-daemon -PreactNativeArchitectures=x86_64 app:assembleRelease
 )
 
 readonly apk="$PWD/example/android/app/build/outputs/apk/release/app-release.apk"
