@@ -51,7 +51,12 @@ function FrameControls() {
   const stateLabel = `lazy: ${frame.state}`;
   return (
     <View style={styles.frameControls}>
-      <Text accessibilityLabel={stateLabel}>{stateLabel}</Text>
+      <Text
+        accessibilityLabel={stateLabel}
+        testID={`lazy-frame-${frame.state}`}
+      >
+        {stateLabel}
+      </Text>
       <Button onPress={() => void frame.preload()} title="Preload lazy Frame" />
       <Button onPress={() => void frame.load()} title="Load lazy Frame" />
     </View>
@@ -167,7 +172,12 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.hostBar}>
-        <Text accessibilityLabel={historyLabel}>{historyLabel}</Text>
+        <Text
+          accessibilityLabel={historyLabel}
+          testID={`history-depth-${history.length}`}
+        >
+          {historyLabel}
+        </Text>
         <Button disabled={history.length <= 1} onPress={goBack} title="Back" />
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -180,7 +190,12 @@ export default function App() {
         >
           <TurboLiteScreen url={screenUrl} />
         </TurboLiteProvider>
-        <Text accessibilityLabel={errorLabel}>{errorLabel}</Text>
+        <Text
+          accessibilityLabel={errorLabel}
+          testID={`last-error-${lastError}`}
+        >
+          {errorLabel}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
