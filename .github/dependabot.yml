@@ -9,6 +9,11 @@ updates:
         dependency-type: development
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: react-native
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
   - package-ecosystem: github-actions
     directory: /
     schedule:
