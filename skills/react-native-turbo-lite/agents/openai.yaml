@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Native Turbo Lite"
+  short_description: "Build safe Turbo Lite app integrations"
+  default_prompt: "Use $react-native-turbo-lite to integrate a Rails Turbo flow into this Expo or React Native app."

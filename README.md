@@ -124,6 +124,14 @@ and lazy Frames, preloading, GET and POST forms, Streams, and error reporting.
 Read the [wire format and limits](./docs/protocol.md) and the exact
 [compatibility matrix](./docs/compatibility.md).
 
+## Agent skill
+
+The repository includes an installable
+[React Native Turbo Lite agent skill](./skills/react-native-turbo-lite/SKILL.md).
+It tells coding agents when to use the package, which behavior must remain
+host-owned, how to implement links, forms, Frames, and Streams, and what evidence
+is required before calling an adoption release-ready.
+
 ## Development and release checks
 
 ```sh
