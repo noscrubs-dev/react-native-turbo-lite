@@ -1,6 +1,7 @@
 import React, {
   type ComponentType,
   type ReactNode,
+  useCallback,
   useMemo,
   useState,
 } from "react";
@@ -8,6 +9,7 @@ import {
   Button,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -146,6 +148,10 @@ export default function App() {
   const [history, setHistory] = useState([initialUrl]);
   const [screenUrl, setScreenUrl] = useState(initialUrl);
   const [lastError, setLastError] = useState("none");
+  const handleError = useCallback(
+    (error: { code: string }) => setLastError(error.code),
+    [],
+  );
   const renderer = useMemo(() => createComponentRenderer({ components }), []);
   const navigation = useMemo(
     () => ({
@@ -171,21 +177,25 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.hostBar}>
-        <Text
-          accessibilityLabel={historyLabel}
-          testID={`history-depth-${history.length}`}
-        >
-          {historyLabel}
-        </Text>
-        <Button disabled={history.length <= 1} onPress={goBack} title="Back" />
-      </View>
       <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.hostBar}>
+          <Text
+            accessibilityLabel={historyLabel}
+            testID={`history-depth-${history.length}`}
+          >
+            {historyLabel}
+          </Text>
+          <Button
+            disabled={history.length <= 1}
+            onPress={goBack}
+            title="Back"
+          />
+        </View>
         <TurboLiteProvider
           baseUrl={initialUrl}
           fetch={demoFetch}
           navigation={navigation}
-          onError={(error) => setLastError(error.code)}
+          onError={handleError}
           renderer={renderer}
         >
           <TurboLiteScreen url={screenUrl} />
@@ -205,11 +215,8 @@ const styles = StyleSheet.create({
   frameControls: { gap: 6 },
   hostBar: {
     alignItems: "center",
-    borderBottomColor: "#d5d9e2",
-    borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: 12,
   },
   input: {
     borderColor: "#9098a8",
@@ -224,7 +231,11 @@ const styles = StyleSheet.create({
     gap: 6,
     padding: 12,
   },
-  safeArea: { backgroundColor: "white", flex: 1 },
+  safeArea: {
+    backgroundColor: "white",
+    flex: 1,
+    paddingTop: StatusBar.currentHeight ?? 0,
+  },
   screen: { gap: 12 },
   scroll: { gap: 16, padding: 16 },
   title: { fontSize: 24, fontWeight: "700" },

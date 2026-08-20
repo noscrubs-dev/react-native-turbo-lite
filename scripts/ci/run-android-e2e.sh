@@ -101,8 +101,11 @@ for _ in $(seq 1 120); do
   sleep 2
 done
 test "$(timeout 5 adb -s "$adb_serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1"
+sleep 10
 
 timeout 120 adb -s "$adb_serial" install -r "$apk" >"$artifacts/install.log" 2>&1
+adb -s "$adb_serial" wait-for-device
+sleep 5
 adb -s "$adb_serial" logcat -c
 maestro --device "$adb_serial" test \
   --format junit \

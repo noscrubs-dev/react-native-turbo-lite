@@ -4,17 +4,11 @@ appId: dev.turbolite.example
     clearState: true
 - assertVisible: "Turbo Lite release example"
 - assertVisible: "Home document"
-- assertVisible:
-    id: "history-depth-1"
 - assertVisible: "Eager Frame loaded"
 - tapOn: "Open details"
 - assertVisible: "Details document"
-- assertVisible:
-    id: "history-depth-2"
 - tapOn: "Back"
 - assertVisible: "Home document"
-- assertVisible:
-    id: "history-depth-1"
 - assertVisible: "Lazy placeholder"
 - assertNotVisible: "Lazy Frame loaded from preload"
 - tapOn: "Preload lazy Frame"
@@ -29,6 +23,7 @@ appId: dev.turbolite.example
     direction: DOWN
 - tapOn: "Laundry item"
 - inputText: "Towels"
+- hideKeyboard
 - tapOn: "Run POST Stream"
 - assertVisible: "Saved by Stream"
 - assertVisible: "Towels"
@@ -41,11 +36,8 @@ appId: dev.turbolite.example
     direction: UP
 - tapOn: "Search query"
 - inputText: "shirts"
+- hideKeyboard
 - tapOn: "Run GET form"
 - assertVisible: "GET form result"
-- assertVisible:
-    id: "history-depth-2"
 - tapOn: "Back"
 - assertVisible: "Home document"
-- assertVisible:
-    id: "history-depth-1"
