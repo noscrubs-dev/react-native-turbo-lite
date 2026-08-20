@@ -6,6 +6,7 @@ GET and POST forms, ordered Streams, and unknown-wrapper diagnostics.
 
 ```sh
 npm run build --prefix ..
+npm pack --prefix .. --ignore-scripts
 npm install
 npm run android
 ```

@@ -17,6 +17,7 @@ export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 export PATH="$HOME/.local/bin:$HOME/.bun/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 export MAESTRO_CLI_NO_ANALYTICS=1
 export MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
+export NODE_ENV=production
 
 readonly adb_serial="emulator-5580"
 readonly avd_name="expo-turbo-api35"
@@ -50,6 +51,7 @@ trap cleanup EXIT
 scripts/ci/check-maestro-version.sh
 bun x --package "npm@${npm_version}" npm ci --no-audit
 bun x --package "npm@${npm_version}" npm run build
+bun x --package "npm@${npm_version}" npm pack --ignore-scripts
 bun x --package "npm@${npm_version}" npm ci --prefix example --ignore-scripts --no-audit
 
 (
