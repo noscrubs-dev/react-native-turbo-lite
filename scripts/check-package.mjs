@@ -16,12 +16,15 @@ for (const name of dependencyNames) {
   }
 }
 
-const packed = JSON.parse(
-  execFileSync("npm", ["pack", "--json", "--dry-run", "--ignore-scripts"], {
-    encoding: "utf8",
-  }),
-)[0];
-const paths = packed.files.map((file) => file.path);
+const packed = execFileSync(
+  "bun",
+  ["pm", "pack", "--dry-run", "--ignore-scripts"],
+  { encoding: "utf8" },
+);
+const paths = Array.from(
+  packed.matchAll(/^packed\s+\S+\s+(.+)$/gm),
+  (match) => match[1],
+);
 for (const required of [
   "dist/index.js",
   "dist/index.d.ts",
@@ -48,6 +51,5 @@ for (const name of [
 ]) {
   if (!(name in root)) throw new Error(`Built entrypoint is missing ${name}`);
 }
-console.log(
-  `package-content: ${paths.length} files, ${packed.size} bytes packed`,
-);
+const unpackedSize = packed.match(/^Unpacked size:\s+(.+)$/m)?.[1] ?? "unknown";
+console.log(`package-content: ${paths.length} files, ${unpackedSize} unpacked`);

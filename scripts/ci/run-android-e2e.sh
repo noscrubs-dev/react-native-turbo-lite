@@ -21,7 +21,6 @@ export MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
 readonly adb_serial="emulator-5580"
 readonly avd_name="expo-turbo-api35"
 readonly artifacts="$PWD/artifacts/android-device"
-readonly npm_version="11.5.2"
 mkdir -p "$artifacts"
 
 emulator_pid=""
@@ -39,7 +38,6 @@ cleanup() {
     echo "commit=$(git rev-parse HEAD)"
     echo "runner=$(hostname)"
     echo "bun=$(bun --version)"
-    echo "npm=$(bun x --package npm@${npm_version} npm --version)"
     echo "java=$(java -version 2>&1 | sed -n '1p')"
     echo "maestro=$(scripts/ci/check-maestro-version.sh)"
   } >"$artifacts/environment.txt" 2>&1 || true
@@ -48,20 +46,13 @@ cleanup() {
 trap cleanup EXIT
 
 scripts/ci/check-maestro-version.sh
-bun x --package "npm@${npm_version}" npm ci --no-audit
-bun x --package "npm@${npm_version}" npm run build
-bun x --package "npm@${npm_version}" npm pack --ignore-scripts
+bun install --frozen-lockfile
+bun run build
+bun pm pack --ignore-scripts
 
 (
   cd example
-  bun x --package "npm@${npm_version}" npm install \
-    ../react-native-turbo-lite-0.1.0.tgz \
-    --save-exact \
-    --package-lock-only \
-    --force \
-    --ignore-scripts \
-    --no-audit
-  bun x --package "npm@${npm_version}" npm ci --ignore-scripts --no-audit
+  bun install --frozen-lockfile --ignore-scripts
   NODE_ENV=production bun x expo prebuild --platform android --no-install --clean
   cd android
   NODE_ENV=production \

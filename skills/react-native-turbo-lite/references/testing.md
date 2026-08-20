@@ -12,7 +12,7 @@ failure, or claiming a release is ready.
 3. **Runtime/integration tests** prove cancellation, latest-request-wins,
    navigation semantics, Frame targeting/preload, form encoding, and Stream
    mutations.
-4. **Packed-package E2E** proves the public npm boundary, Expo/React Native
+4. **Packed-package E2E** proves the public registry boundary, Expo/React Native
    bundling, release APK, router Back behavior, native input, and accessibility
    selectors.
 
@@ -41,7 +41,7 @@ Rails response, and a device screenshot does not prove cancellation races.
 For the release example and native E2E:
 
 1. Build the package.
-2. Create an npm tarball.
+2. Create the package tarball with `bun pm pack`.
 3. Install that tarball into the example app. Avoid `file:..` symlinks, which
    can create duplicate React copies and conceal package-boundary defects.
 4. Generate native projects from a clean Expo prebuild.

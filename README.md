@@ -10,7 +10,7 @@ framework.
 ## Install
 
 ```sh
-npm install react-native-turbo-lite
+bun add react-native-turbo-lite
 ```
 
 ## Root setup
@@ -135,14 +135,16 @@ is required before calling an adoption release-ready.
 ## Development and release checks
 
 ```sh
-npm ci
-npm run check
-npm run test:coverage
-npm audit
+bun install --frozen-lockfile
+bun run check
+bun run test:coverage
+bun audit
 ```
 
-`npm run check` runs formatting and lint checks, strict TypeScript, unit and
+`bun run check` runs formatting and lint checks, strict TypeScript, unit and
 React integration tests, example type checking, the ESM and declaration build,
-archive-boundary checks, and `npm pack --dry-run`. Android device E2E runs on the
+archive-boundary checks, and `bun pm pack --dry-run`. Android device E2E runs on the
 self-hosted release runner. Publishing happens only from the GitHub release
-workflow; local checks never publish.
+workflow; local checks never publish. The final registry upload intentionally
+uses npm CLI because npm trusted publishing authenticates that command through
+GitHub OIDC; all dependency, build, test, audit, and pack work uses Bun.

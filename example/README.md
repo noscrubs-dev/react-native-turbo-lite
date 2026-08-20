@@ -5,10 +5,12 @@ files. It covers native history, links, eager and lazy Frames, Frame preloading,
 GET and POST forms, ordered Streams, and unknown-wrapper diagnostics.
 
 ```sh
-npm run build --prefix ..
-npm pack --prefix .. --ignore-scripts
-npm install
-npm run android
+cd ..
+bun run build
+bun pm pack --ignore-scripts
+cd example
+bun install --frozen-lockfile
+bun run android
 ```
 
 Protocol edge cases and failure races stay in the faster unit and React
