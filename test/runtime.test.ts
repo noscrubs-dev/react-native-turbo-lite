@@ -41,6 +41,7 @@ describe("TurboLiteRuntime requests", () => {
     });
     const oldVisit = runtime.visit("/old");
     const newVisit = runtime.visit("/new");
+    expect((fetch.mock.calls[0]?.[1].signal as AbortSignal).aborted).toBe(true);
     second.resolve(response(page("New")));
     await newVisit;
     first.resolve(response(page("Old")));
@@ -202,6 +203,7 @@ describe("TurboLiteRuntime requests", () => {
   it.each([
     ["document", page("Created"), 201, undefined, "Created"],
     ["422", page("Validation failed"), 422, undefined, "Validation failed"],
+    ["server error document", page("Try again"), 500, undefined, "Try again"],
     [
       "Frame",
       '<Screen><turbo-frame id="form-result"><Text>Frame saved</Text></turbo-frame></Screen>',
@@ -265,6 +267,61 @@ describe("TurboLiteRuntime requests", () => {
       "FirstLast",
     );
     expect(errors.some((error) => error.code === "stream")).toBe(true);
+  });
+
+  it("applies embedded Streams after the response document commits", async () => {
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch: async () =>
+        response(
+          '<Screen><List id="list">Old</List><turbo-stream action="update" target="list"><template><Text>Embedded</Text></template></turbo-stream></Screen>',
+        ),
+    });
+    await runtime.visit("/cart");
+    expect(textContent(nodeById(runtime.getSnapshot().tree, "list"))).toBe(
+      "Embedded",
+    );
+  });
+
+  it("reloads the current document for a refresh Stream", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Before")))
+      .mockResolvedValueOnce(
+        response('<turbo-stream action="refresh"></turbo-stream>', {
+          contentType: "text/vnd.turbo-stream.html",
+        }),
+      )
+      .mockResolvedValueOnce(response(page("After refresh")));
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+    });
+    await runtime.visit("/cart");
+    await runtime.submit({ action: "/save", entries: [], method: "post" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[2]?.[0]).toBe("https://app.test/cart");
+    expect(fetch.mock.calls[2]?.[1].method).toBe("GET");
+    expect(textContent(runtime.getSnapshot().tree)).toBe("After refresh");
+  });
+
+  it("commits a POST redirect URL and reports it to host navigation", async () => {
+    const navigate = vi.fn();
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch: async () =>
+        response(page("Receipt"), { url: "https://app.test/orders/42" }),
+      navigation: { navigate },
+    });
+    await runtime.submit({
+      action: "/orders",
+      entries: [["item", "shirt"]],
+      method: "post",
+    });
+    expect(runtime.getSnapshot().url).toBe("https://app.test/orders/42");
+    expect(navigate).toHaveBeenCalledWith("https://app.test/orders/42", {
+      replace: false,
+    });
   });
 
   it("preserves the committed tree across 204, media, network, parse, and safety failures", async () => {
