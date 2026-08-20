@@ -1,8 +1,16 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
     "noEmit": true,
     "types": ["react", "react-native"]
   },
-  "include": ["./App.tsx", "../src"]
+  "include": ["./App.tsx", "./index.ts"]
 }

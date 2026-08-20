@@ -328,6 +328,17 @@ export function assertUniqueIds(node: InternalNode, url?: string): void {
     ) {
       throw new ParseError("turbo-frame requires a non-empty id", { url });
     }
+    if (
+      normalizeTagName(current.type) === "turbo-frame" &&
+      current.props.loading !== undefined &&
+      current.props.loading !== "eager" &&
+      current.props.loading !== "lazy"
+    ) {
+      throw new ParseError(
+        'turbo-frame loading must be either "eager" or "lazy"',
+        { url },
+      );
+    }
     const id = current.props.id;
     if (typeof id === "string") {
       if (ids.has(id)) throw new DuplicateIdError(id, url);

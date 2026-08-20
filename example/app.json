@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Turbo Lite Release Example",
+    "slug": "react-native-turbo-lite-example",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "dev.turbolite.example"
+    }
+  }
+}

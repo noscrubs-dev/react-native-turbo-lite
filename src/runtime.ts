@@ -1,16 +1,25 @@
 import { FrameMissingError, ParseError, TurboLiteError } from "./errors.js";
 import {
   type InternalNode,
+  type ParsedDocument,
   publicNode,
   type StreamAction,
 } from "./internal.js";
 import { parseDocument, parseStreamResponse, resolveLimits } from "./parser.js";
-import { applyStreamAction, collectEagerFrames, replaceFrame } from "./tree.js";
+import { normalizeTagName } from "./tags.js";
+import {
+  applyStreamAction,
+  collectFrames,
+  findById,
+  replaceFrame,
+} from "./tree.js";
 import type {
   FormEntry,
   SubmitOptions,
+  TurboLiteFrameSnapshot,
   TurboLiteRuntimeOptions,
   TurboLiteSnapshot,
+  TurboLiteVisitHistory,
   VisitOptions,
 } from "./types.js";
 
@@ -51,7 +60,21 @@ function asError(error: unknown, url: string): TurboLiteError {
 
 interface RequestTarget {
   frame?: string;
-  replace: boolean;
+  history: TurboLiteVisitHistory;
+}
+
+interface PreparedFrame {
+  finalUrl: string;
+  generation: number;
+  parsed: ParsedDocument;
+  src: string;
+}
+
+interface PreloadRequest {
+  controller: AbortController;
+  generation: number;
+  promise: Promise<void>;
+  src: string;
 }
 
 export class TurboLiteRuntime {
@@ -64,10 +87,14 @@ export class TurboLiteRuntime {
     string,
     { controller: AbortController; id: number }
   >();
+  readonly #frameStates = new Map<string, TurboLiteFrameSnapshot>();
+  readonly #preparedFrames = new Map<string, PreparedFrame>();
+  readonly #preloadRequests = new Map<string, PreloadRequest>();
   #nextRequest = 0;
   #documentGeneration = 0;
   #tree: InternalNode | undefined;
   #snapshot: TurboLiteSnapshot = {
+    frames: {},
     pending: false,
     revision: 0,
     tree: undefined,
@@ -87,7 +114,9 @@ export class TurboLiteRuntime {
   };
 
   #emit(): void {
+    const frames = Object.fromEntries(this.#frameStates);
     const next: TurboLiteSnapshot = {
+      frames,
       pending: this.#requests.size > 0,
       revision: this.#snapshot.revision,
       tree: this.#tree === undefined ? undefined : publicNode(this.#tree),
@@ -133,6 +162,14 @@ export class TurboLiteRuntime {
       this.#report(error, input);
       return;
     }
+    if (
+      options.frame === undefined &&
+      options.history === "none" &&
+      this.#tree !== undefined &&
+      url === this.#snapshot.url
+    ) {
+      return;
+    }
     await this.#request(
       url,
       {
@@ -143,7 +180,8 @@ export class TurboLiteRuntime {
       },
       {
         ...(options.frame === undefined ? {} : { frame: options.frame }),
-        replace: options.replace ?? false,
+        history:
+          options.frame === undefined ? (options.history ?? "push") : "none",
       },
     );
   }
@@ -185,8 +223,146 @@ export class TurboLiteRuntime {
       },
       {
         ...(options.frame === undefined ? {} : { frame: options.frame }),
-        replace: false,
+        history: options.frame === undefined ? "push" : "none",
       },
+    );
+  }
+
+  async preloadFrame(frameId: string): Promise<void> {
+    if (this.#disposed) return;
+    const frame = this.#frameStates.get(frameId);
+    if (frame?.src === undefined) {
+      this.#report(
+        new FrameMissingError(frameId, this.#snapshot.url),
+        this.#snapshot.url,
+      );
+      return;
+    }
+    if (frame.state === "loaded" || frame.state === "loading") return;
+    const prepared = this.#preparedFrames.get(frameId);
+    if (
+      prepared?.generation === this.#documentGeneration &&
+      prepared.src === frame.src
+    ) {
+      return;
+    }
+    const active = this.#preloadRequests.get(frameId);
+    if (
+      active?.generation === this.#documentGeneration &&
+      active.src === frame.src
+    ) {
+      await active.promise;
+      return;
+    }
+    active?.controller.abort();
+    const controller = new AbortController();
+    const generation = this.#documentGeneration;
+    const src = frame.src;
+    this.#setFrameState(frameId, "preloading");
+    const promise = this.#performPreload(frameId, src, generation, controller);
+    this.#preloadRequests.set(frameId, {
+      controller,
+      generation,
+      promise,
+      src,
+    });
+    this.#emit();
+    await promise;
+  }
+
+  async loadFrame(frameId: string): Promise<void> {
+    if (this.#disposed) return;
+    const frame = this.#frameStates.get(frameId);
+    if (frame?.src === undefined) {
+      this.#report(
+        new FrameMissingError(frameId, this.#snapshot.url),
+        this.#snapshot.url,
+      );
+      return;
+    }
+    if (frame.state === "loaded" || frame.state === "loading") return;
+    const active = this.#preloadRequests.get(frameId);
+    if (active !== undefined) await active.promise;
+    const prepared = this.#preparedFrames.get(frameId);
+    if (
+      prepared?.generation === this.#documentGeneration &&
+      prepared.src === frame.src
+    ) {
+      await this.#commitPreparedFrame(frameId, prepared);
+      return;
+    }
+    this.#setFrameState(frameId, "loading");
+    this.#emit();
+    await this.visit(frame.src, { frame: frameId });
+  }
+
+  async #performPreload(
+    frameId: string,
+    src: string,
+    generation: number,
+    controller: AbortController,
+  ): Promise<void> {
+    await Promise.resolve();
+    let url = src;
+    try {
+      url = this.#resolve(src);
+      const response = await this.#options.fetch(url, {
+        headers: {
+          Accept: "text/html, application/xhtml+xml",
+          "Turbo-Frame": frameId,
+        },
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+      });
+      if (!this.#ownsPreload(frameId, generation, src)) return;
+      if (response.status === 204) {
+        this.#setFrameState(frameId, "idle");
+        return;
+      }
+      const type = mediaType(response);
+      if (!DOCUMENT_MEDIA_TYPES.has(type)) {
+        throw new TurboLiteError(
+          "media-type",
+          `Frame preload requires a document response, received: ${type || "missing"}`,
+          { url: response.url || url },
+        );
+      }
+      const finalUrl = response.url || url;
+      const parsed = parseDocument(await response.text(), {
+        limits: this.#options.limits,
+        url: finalUrl,
+      });
+      if (!this.#ownsPreload(frameId, generation, src)) return;
+      const match = findById(parsed.tree, frameId);
+      if (
+        match === undefined ||
+        normalizeTagName(match.node.type) !== "turbo-frame"
+      ) {
+        throw new FrameMissingError(frameId, finalUrl);
+      }
+      this.#preparedFrames.set(frameId, { finalUrl, generation, parsed, src });
+      this.#setFrameState(frameId, "preloaded");
+    } catch (error) {
+      if (!isAbort(error) && this.#ownsPreload(frameId, generation, src)) {
+        this.#setFrameState(frameId, "idle");
+        this.#report(error, url);
+      }
+    } finally {
+      if (this.#ownsPreload(frameId, generation, src)) {
+        this.#preloadRequests.delete(frameId);
+        this.#emit();
+      }
+    }
+  }
+
+  #ownsPreload(frameId: string, generation: number, src: string): boolean {
+    const request = this.#preloadRequests.get(frameId);
+    return (
+      !this.#disposed &&
+      generation === this.#documentGeneration &&
+      request?.generation === generation &&
+      request.src === src
     );
   }
 
@@ -201,9 +377,26 @@ export class TurboLiteRuntime {
     if (target.frame === undefined) {
       this.#documentGeneration++;
       for (const request of this.#requests.values()) request.controller.abort();
+      for (const request of this.#preloadRequests.values())
+        request.controller.abort();
       this.#requests.clear();
+      this.#preloadRequests.clear();
+      this.#preparedFrames.clear();
+      for (const frame of this.#frameStates.values()) {
+        if (
+          frame.state === "loading" ||
+          frame.state === "preloading" ||
+          frame.state === "preloaded"
+        ) {
+          this.#setFrameState(frame.id, "idle");
+        }
+      }
     } else {
       this.#requests.get(slot)?.controller.abort();
+      this.#preloadRequests.get(target.frame)?.controller.abort();
+      this.#preloadRequests.delete(target.frame);
+      this.#preparedFrames.delete(target.frame);
+      this.#setFrameState(target.frame, "loading");
     }
     const generation = this.#documentGeneration;
     const id = ++this.#nextRequest;
@@ -230,7 +423,14 @@ export class TurboLiteRuntime {
     } finally {
       if (this.#requests.get(slot)?.id === id) {
         this.#requests.delete(slot);
+        if (
+          target.frame !== undefined &&
+          this.#frameStates.get(target.frame)?.state === "loading"
+        ) {
+          this.#setFrameState(target.frame, "idle");
+        }
         this.#emit();
+        if (target.frame === undefined) this.#scheduleEagerFrames();
       }
     }
   }
@@ -283,28 +483,29 @@ export class TurboLiteRuntime {
       if (replaced === undefined)
         throw new FrameMissingError(target.frame, finalUrl);
       this.#tree = replaced;
+      this.#syncFrames();
+      this.#setFrameState(target.frame, "loaded");
       this.#snapshot = {
         ...this.#snapshot,
         revision: this.#snapshot.revision + 1,
       };
       this.#emit();
     } else {
+      this.#frameStates.clear();
       this.#tree = parsed.tree;
+      this.#syncFrames();
       this.#snapshot = {
         ...this.#snapshot,
         revision: this.#snapshot.revision + 1,
         url: finalUrl,
       };
       this.#emit();
-      this.#options.navigation?.navigate(finalUrl, { replace: target.replace });
+      if (target.history === "push") this.#options.navigation?.push(finalUrl);
+      if (target.history === "replace")
+        this.#options.navigation?.replace(finalUrl);
     }
     await this.#applyStreams(parsed.streams, finalUrl);
-    if (target.frame === undefined) {
-      if (ownsRequest() && this.#tree !== undefined)
-        this.#loadEagerFrames(this.#tree);
-    } else if (ownsRequest()) {
-      this.#loadEagerFrames(parsed.tree, target.frame);
-    }
+    if (ownsRequest()) this.#scheduleEagerFrames(target.frame);
   }
 
   async #applyStreams(
@@ -337,26 +538,117 @@ export class TurboLiteRuntime {
     }
     if (changed) {
       this.#tree = tree;
+      this.#syncFrames();
       this.#snapshot = {
         ...this.#snapshot,
         revision: this.#snapshot.revision + 1,
       };
       this.#emit();
     }
-    if (refresh) await this.visit(this.#snapshot.url, { replace: true });
+    if (changed) this.#scheduleEagerFrames();
+    if (refresh) await this.visit(this.#snapshot.url, { history: "replace" });
   }
 
-  #loadEagerFrames(tree: InternalNode, excludedFrame?: string): void {
-    for (const frame of collectEagerFrames(tree)) {
-      if (frame.id === excludedFrame) continue;
-      void this.visit(frame.src, { frame: frame.id });
+  async #commitPreparedFrame(
+    frameId: string,
+    prepared: PreparedFrame,
+  ): Promise<void> {
+    if (
+      this.#tree === undefined ||
+      prepared.generation !== this.#documentGeneration
+    ) {
+      return;
+    }
+    const replaced = replaceFrame(this.#tree, prepared.parsed.tree, frameId);
+    if (replaced === undefined) {
+      this.#report(
+        new FrameMissingError(frameId, prepared.finalUrl),
+        prepared.finalUrl,
+      );
+      return;
+    }
+    this.#preparedFrames.delete(frameId);
+    this.#tree = replaced;
+    this.#syncFrames();
+    this.#setFrameState(frameId, "loaded");
+    this.#snapshot = {
+      ...this.#snapshot,
+      revision: this.#snapshot.revision + 1,
+    };
+    this.#emit();
+    await this.#applyStreams(prepared.parsed.streams, prepared.finalUrl);
+    this.#scheduleEagerFrames(frameId);
+  }
+
+  #syncFrames(): void {
+    const next = new Map<string, TurboLiteFrameSnapshot>();
+    if (this.#tree !== undefined) {
+      for (const frame of collectFrames(this.#tree)) {
+        const current = this.#frameStates.get(frame.id);
+        if (
+          current !== undefined &&
+          current.src === frame.src &&
+          current.loading === frame.loading
+        ) {
+          next.set(frame.id, current);
+        } else {
+          if (current !== undefined) {
+            const slot = `frame:${frame.id}`;
+            this.#requests.get(slot)?.controller.abort();
+            this.#requests.delete(slot);
+            this.#preloadRequests.get(frame.id)?.controller.abort();
+            this.#preloadRequests.delete(frame.id);
+          }
+          next.set(frame.id, {
+            ...frame,
+            state: frame.src === undefined ? "loaded" : "idle",
+          });
+          this.#preparedFrames.delete(frame.id);
+        }
+      }
+    }
+    for (const [id] of this.#frameStates) {
+      if (next.has(id)) continue;
+      this.#requests.get(`frame:${id}`)?.controller.abort();
+      this.#preloadRequests.get(id)?.controller.abort();
+      this.#preloadRequests.delete(id);
+      this.#preparedFrames.delete(id);
+    }
+    this.#frameStates.clear();
+    for (const [id, frame] of next) this.#frameStates.set(id, frame);
+  }
+
+  #setFrameState(
+    frameId: string,
+    state: TurboLiteFrameSnapshot["state"],
+  ): void {
+    const frame = this.#frameStates.get(frameId);
+    if (frame !== undefined)
+      this.#frameStates.set(frameId, { ...frame, state });
+  }
+
+  #scheduleEagerFrames(excludedFrame?: string): void {
+    for (const frame of this.#frameStates.values()) {
+      if (
+        frame.id === excludedFrame ||
+        frame.loading !== "eager" ||
+        frame.src === undefined ||
+        frame.state !== "idle"
+      ) {
+        continue;
+      }
+      void this.loadFrame(frame.id);
     }
   }
 
   dispose(): void {
     this.#disposed = true;
     for (const request of this.#requests.values()) request.controller.abort();
+    for (const request of this.#preloadRequests.values())
+      request.controller.abort();
     this.#requests.clear();
+    this.#preloadRequests.clear();
+    this.#preparedFrames.clear();
     this.#listeners.clear();
   }
 }

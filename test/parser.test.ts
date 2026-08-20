@@ -114,6 +114,11 @@ describe("Turbo markup parser", () => {
       ParseError,
     );
     expect(() =>
+      parseDocument(
+        '<Screen><turbo-frame id="summary" loading="later" /></Screen>',
+      ),
+    ).toThrow(ParseError);
+    expect(() =>
       parseStreamResponse(
         '<turbo-stream action="refresh" target="page"></turbo-stream>',
       ),

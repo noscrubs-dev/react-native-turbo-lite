@@ -14,6 +14,7 @@ export {
   TurboLiteScreen,
   useTurboLiteField,
   useTurboLiteForm,
+  useTurboLiteFrame,
   useTurboLiteLink,
   useTurboLiteRuntime,
 } from "./react.js";
@@ -27,6 +28,10 @@ export {
   type SubmitOptions,
   type TurboLiteErrorHandler,
   type TurboLiteFetch,
+  type TurboLiteFrameController,
+  type TurboLiteFrameLoading,
+  type TurboLiteFrameSnapshot,
+  type TurboLiteFrameState,
   type TurboLiteLimits,
   type TurboLiteNavigationAdapter,
   type TurboLiteNode,
@@ -35,5 +40,6 @@ export {
   type TurboLiteRuntimeOptions,
   type TurboLiteScreenProps,
   type TurboLiteSnapshot,
+  type TurboLiteVisitHistory,
   type VisitOptions,
 } from "./types.js";

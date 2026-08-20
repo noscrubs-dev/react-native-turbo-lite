@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "react-native-turbo-lite": ["../dist/index.d.ts"]
+    }
+  },
+  "include": ["./App.tsx"]
+}

@@ -1,0 +1,44 @@
+appId: dev.turbolite.example
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Turbo Lite release example"
+- assertVisible: "Home document"
+- assertVisible: "Native history: 1"
+- assertVisible: "Eager Frame loaded"
+- tapOn: "Open details"
+- assertVisible: "Details document"
+- assertVisible: "Native history: 2"
+- tapOn: "Back"
+- assertVisible: "Home document"
+- assertVisible: "Native history: 1"
+- assertVisible: "Lazy placeholder"
+- assertNotVisible: "Lazy Frame loaded from preload"
+- tapOn: "Preload lazy Frame"
+- assertVisible: "lazy: preloaded"
+- assertVisible: "Lazy placeholder"
+- tapOn: "Load lazy Frame"
+- assertVisible: "Lazy Frame loaded from preload"
+- scrollUntilVisible:
+    element:
+      text: "Run POST Stream"
+    direction: DOWN
+- tapOn: "Laundry item"
+- inputText: "Towels"
+- tapOn: "Run POST Stream"
+- assertVisible: "Saved by Stream"
+- assertVisible: "Towels"
+- assertVisible: "Unknown wrappers keep their children."
+- assertVisible: "Last error: unknown-element"
+- scrollUntilVisible:
+    element:
+      text: "Run GET form"
+    direction: UP
+- tapOn: "Search query"
+- inputText: "shirts"
+- tapOn: "Run GET form"
+- assertVisible: "GET form result"
+- assertVisible: "Native history: 2"
+- tapOn: "Back"
+- assertVisible: "Home document"
+- assertVisible: "Native history: 1"

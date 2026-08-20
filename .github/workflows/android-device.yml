@@ -1,0 +1,40 @@
+name: Android release E2E
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: react-native-turbo-lite-android-device
+  cancel-in-progress: false
+
+jobs:
+  maestro:
+    name: Android release E2E
+    if: github.repository == 'noscrubs-dev/react-native-turbo-lite'
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - expo-turbo-android-trusted
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Run packaged example on Android
+        shell: bash
+        run: exec scripts/ci/run-android-e2e.sh
+      - name: Upload device evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-device-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/android-device
+          include-hidden-files: false
+          if-no-files-found: warn
+          retention-days: 14

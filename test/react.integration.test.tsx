@@ -15,6 +15,7 @@ import {
   UnknownElementError,
   useTurboLiteField,
   useTurboLiteForm,
+  useTurboLiteFrame,
   useTurboLiteLink,
 } from "../src/index.js";
 import { response } from "./helpers.js";
@@ -45,6 +46,8 @@ function Text({ accessibilityLabel, children }: Record<string, unknown>) {
 
 describe("React root adapter integration", () => {
   it("renders a screen from only its URL and uses the one root component map", async () => {
+    const push = vi.fn();
+    const replace = vi.fn();
     const renderer = createComponentRenderer({ components: { Screen, Text } });
     const fetch = vi.fn(async () =>
       response(
@@ -55,6 +58,7 @@ describe("React root adapter integration", () => {
       <TurboLiteProvider
         baseUrl="https://app.test"
         fetch={fetch}
+        navigation={{ push, replace }}
         renderer={renderer}
       >
         <TurboLiteScreen url="/cart" />
@@ -66,6 +70,56 @@ describe("React root adapter integration", () => {
       ),
     ).toBe("title");
     expect(fetch).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("lets a native Frame boundary preload before it commits lazy content", async () => {
+    function FrameControls() {
+      const frame = useTurboLiteFrame();
+      return (
+        <div>
+          <span>{frame.state}</span>
+          <button onClick={() => void frame.preload()} type="button">
+            Preload
+          </button>
+          <button onClick={() => void frame.load()} type="button">
+            Load
+          </button>
+        </div>
+      );
+    }
+    const renderer = createComponentRenderer({
+      components: { FrameControls, Screen, Text },
+    });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="panel" src="/panel" loading="lazy"><Text>Placeholder</Text><FrameControls/></turbo-frame></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="panel"><Text>Prepared content</Text></turbo-frame></Screen>',
+        ),
+      );
+    render(
+      <TurboLiteProvider
+        baseUrl="https://app.test"
+        fetch={fetch}
+        renderer={renderer}
+      >
+        <TurboLiteScreen url="/frames" />
+      </TurboLiteProvider>,
+    );
+    fireEvent.click(await screen.findByText("Preload"));
+    expect(await screen.findByText("preloaded")).toBeTruthy();
+    expect(screen.getByText("Placeholder")).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByText("Load"));
+    expect(await screen.findByText("Prepared content")).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("renders unknown parent children and reports a typed path once per revision", async () => {

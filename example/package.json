@@ -1,0 +1,21 @@
+{
+  "name": "react-native-turbo-lite-example",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "prebuild:android": "expo prebuild --platform android --clean"
+  },
+  "dependencies": {
+    "expo": "~57.0.14",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-turbo-lite": "file:.."
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}

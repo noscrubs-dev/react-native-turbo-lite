@@ -229,17 +229,27 @@ export function replaceFrame(
   return candidate;
 }
 
-export function collectEagerFrames(
+export function collectFrames(
   root: InternalNode,
-): Array<{ id: string; src: string }> {
-  const frames: Array<{ id: string; src: string }> = [];
+): Array<{ id: string; loading: "eager" | "lazy"; src?: string }> {
+  const frames: Array<{
+    id: string;
+    loading: "eager" | "lazy";
+    src?: string;
+  }> = [];
   const visit = (node: InternalNode): void => {
     if (!isElement(node)) return;
     if (normalizeTagName(node.type) === "turbo-frame") {
       const id = node.props.id;
       const src = node.props.src;
-      if (typeof id === "string" && typeof src === "string")
-        frames.push({ id, src });
+      const loading = node.props.loading === "lazy" ? "lazy" : "eager";
+      if (typeof id === "string") {
+        frames.push({
+          id,
+          loading,
+          ...(typeof src === "string" && src.length > 0 ? { src } : {}),
+        });
+      }
     }
     for (const child of elementChildren(node)) visit(child);
   };

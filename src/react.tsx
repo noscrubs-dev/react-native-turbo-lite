@@ -17,6 +17,7 @@ import { normalizeTagName } from "./tags.js";
 import type {
   FormEntry,
   TurboLiteErrorHandler,
+  TurboLiteFrameController,
   TurboLiteProviderProps,
   TurboLiteRenderer,
   TurboLiteScreenProps,
@@ -117,6 +118,32 @@ export function useTurboLiteRuntime(): TurboLiteRuntime {
   return runtime;
 }
 
+export function useTurboLiteFrame(): TurboLiteFrameController {
+  const runtime = useContext(RuntimeContext);
+  const frameId = useContext(FrameContext);
+  if (runtime === undefined || frameId === undefined) {
+    throw new Error("useTurboLiteFrame requires a <turbo-frame> ancestor");
+  }
+  const snapshot = useSyncExternalStore(
+    runtime.subscribe,
+    runtime.getSnapshot,
+    runtime.getSnapshot,
+  );
+  const frame = snapshot.frames[frameId];
+  if (frame === undefined) {
+    throw new Error(`Turbo Lite Frame #${frameId} is no longer active`);
+  }
+  const load = useCallback(
+    () => runtime.loadFrame(frameId),
+    [frameId, runtime],
+  );
+  const preload = useCallback(
+    () => runtime.preloadFrame(frameId),
+    [frameId, runtime],
+  );
+  return { ...frame, load, preload };
+}
+
 export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
   const config = useProvider();
   const runtime = useMemo(
@@ -139,7 +166,7 @@ export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
   );
 
   useEffect(() => {
-    void runtime.visit(url);
+    void runtime.visit(url, { history: "none" });
   }, [runtime, url]);
   useEffect(() => () => runtime.dispose(), [runtime]);
 

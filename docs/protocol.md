@@ -20,12 +20,23 @@ Application component names are normalized once at the root:
 
 XML attribute names and values arrive as strings exactly as written. Turbo Lite
 consumes protocol attributes such as `href`, `action`, `method`, `target`, `id`,
-and `src`. Application attributes are passed to the renderer unchanged.
+`src`, and Frame `loading`. Application attributes are passed to the renderer
+unchanged.
 
 Use `createComponentRenderer({ decodeAttribute })` when an application needs
 typed values. The hook receives the string value plus normalized tag, attribute
 name, and node path. Do not decode untrusted JSON without its own size/schema
 checks.
+
+## Frames
+
+Every `turbo-frame` requires a unique, non-empty `id`. A `src` request includes
+the matching `Turbo-Frame` header and only commits a response containing that
+exact Frame. `loading` may be `eager` or `lazy`; a missing value means `eager`.
+
+The native host signals visibility for a lazy Frame by calling `load()` from
+`useTurboLiteFrame()`. Calling `preload()` first fetches and validates the same
+document but keeps both the current UI and native navigation unchanged.
 
 ## Default parser limits
 

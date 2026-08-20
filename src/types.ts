@@ -40,8 +40,10 @@ export interface TurboLiteFetch {
 }
 
 export interface TurboLiteNavigationAdapter {
-  /** Called after a full-document response commits. */
-  navigate(url: string, options: { replace: boolean }): void;
+  /** Called after a user-initiated full-document visit commits. */
+  push(url: string): void;
+  /** Called after a refresh-style full-document visit commits. */
+  replace(url: string): void;
 }
 
 export interface RendererContext {
@@ -99,11 +101,37 @@ export interface TurboLiteSnapshot {
   readonly tree: TurboLiteNode | undefined;
   readonly revision: number;
   readonly pending: boolean;
+  readonly frames: Readonly<Record<string, TurboLiteFrameSnapshot>>;
 }
+
+export type TurboLiteFrameLoading = "eager" | "lazy";
+export type TurboLiteFrameState =
+  | "idle"
+  | "preloading"
+  | "preloaded"
+  | "loading"
+  | "loaded";
+
+export interface TurboLiteFrameSnapshot {
+  readonly id: string;
+  readonly loading: TurboLiteFrameLoading;
+  readonly src?: string;
+  readonly state: TurboLiteFrameState;
+}
+
+export interface TurboLiteFrameController extends TurboLiteFrameSnapshot {
+  /** Fetch and validate the Frame without rendering it. */
+  preload(): Promise<void>;
+  /** Render a prepared Frame, or fetch and render it when not prepared. */
+  load(): Promise<void>;
+}
+
+export type TurboLiteVisitHistory = "push" | "replace" | "none";
 
 export interface VisitOptions {
   frame?: string;
-  replace?: boolean;
+  /** Full-document history behavior. Frame visits never change history. */
+  history?: TurboLiteVisitHistory;
 }
 
 export interface SubmitOptions {

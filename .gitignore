@@ -1,5 +1,9 @@
 coverage/
 dist/
 node_modules/
+example/android/
+example/.expo/
+example/dist-e2e-check/
+artifacts/
 *.tgz
 .DS_Store

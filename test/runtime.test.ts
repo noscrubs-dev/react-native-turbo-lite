@@ -13,19 +13,19 @@ const page = (text: string) =>
 
 describe("TurboLiteRuntime requests", () => {
   it("loads a document, follows the final redirected URL, and tells host navigation", async () => {
-    const navigate = vi.fn();
+    const push = vi.fn();
+    const replace = vi.fn();
     const runtime = new TurboLiteRuntime({
       baseUrl: "https://app.test/",
       fetch: async () =>
         response(page("Cart"), { url: "https://app.test/cart/final" }),
-      navigation: { navigate },
+      navigation: { push, replace },
     });
     await runtime.visit("/cart");
     expect(textContent(runtime.getSnapshot().tree)).toBe("Cart");
     expect(runtime.getSnapshot().url).toBe("https://app.test/cart/final");
-    expect(navigate).toHaveBeenCalledWith("https://app.test/cart/final", {
-      replace: false,
-    });
+    expect(push).toHaveBeenCalledWith("https://app.test/cart/final");
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("enforces latest-request-wins even when an aborted adapter resolves late", async () => {
@@ -164,6 +164,136 @@ describe("TurboLiteRuntime requests", () => {
     );
   });
 
+  it("does not request a lazy Frame until the host marks it visible", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="price" src="/price" loading="lazy">Placeholder</turbo-frame></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response('<Screen><turbo-frame id="price">$12</turbo-frame></Screen>'),
+      );
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+    });
+    await runtime.visit("/cart");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(runtime.getSnapshot().frames.price).toMatchObject({
+      loading: "lazy",
+      state: "idle",
+    });
+    await runtime.loadFrame("price");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(textContent(nodeById(runtime.getSnapshot().tree, "price"))).toBe(
+      "$12",
+    );
+    expect(runtime.getSnapshot().frames.price?.state).toBe("loaded");
+  });
+
+  it("preloads a lazy Frame without committing UI or navigation, then reuses it", async () => {
+    const push = vi.fn();
+    const replace = vi.fn();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="price" src="/price" loading="lazy">Placeholder</turbo-frame></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="price">Prepared</turbo-frame></Screen>',
+        ),
+      );
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+      navigation: { push, replace },
+    });
+    await runtime.visit("/cart", { history: "none" });
+    await runtime.preloadFrame("price");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(textContent(nodeById(runtime.getSnapshot().tree, "price"))).toBe(
+      "Placeholder",
+    );
+    expect(runtime.getSnapshot().frames.price?.state).toBe("preloaded");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    await runtime.loadFrame("price");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(textContent(nodeById(runtime.getSnapshot().tree, "price"))).toBe(
+      "Prepared",
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("shares an in-flight preload with load and reports invalid preload responses", async () => {
+    const prepared = deferred<Response>();
+    const errors: TurboLiteError[] = [];
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="price" src="/price" loading="lazy">Placeholder</turbo-frame></Screen>',
+        ),
+      )
+      .mockImplementationOnce(() => prepared.promise)
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="bad" src="/bad" loading="lazy">Bad placeholder</turbo-frame></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response("{}", { contentType: "application/json" }),
+      );
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+      onError: (error) => errors.push(error),
+    });
+    await runtime.visit("/cart");
+    const preload = runtime.preloadFrame("price");
+    expect(runtime.getSnapshot().frames.price?.state).toBe("preloading");
+    expect(runtime.getSnapshot().pending).toBe(false);
+    const load = runtime.loadFrame("price");
+    prepared.resolve(
+      response('<Screen><turbo-frame id="price">Shared</turbo-frame></Screen>'),
+    );
+    await Promise.all([preload, load]);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(textContent(nodeById(runtime.getSnapshot().tree, "price"))).toBe(
+      "Shared",
+    );
+
+    await runtime.visit("/bad", { history: "none" });
+    await runtime.preloadFrame("bad");
+    expect(runtime.getSnapshot().frames.bad?.state).toBe("idle");
+    expect(errors.at(-1)?.code).toBe("media-type");
+  });
+
+  it("reports preload and load calls for a Frame without src", async () => {
+    const errors: TurboLiteError[] = [];
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch: async () =>
+        response(
+          '<Screen><turbo-frame id="static">Done</turbo-frame></Screen>',
+        ),
+      onError: (error) => errors.push(error),
+    });
+    await runtime.visit("/cart");
+    await runtime.preloadFrame("static");
+    await runtime.loadFrame("static");
+    expect(errors).toHaveLength(2);
+    expect(errors.every((error) => error instanceof FrameMissingError)).toBe(
+      true,
+    );
+  });
+
   it("encodes ordered, repeated GET and POST form fields", async () => {
     const calls: Array<{ init: RequestInit; url: string }> = [];
     const runtime = new TurboLiteRuntime({
@@ -284,6 +414,8 @@ describe("TurboLiteRuntime requests", () => {
   });
 
   it("reloads the current document for a refresh Stream", async () => {
+    const push = vi.fn();
+    const replace = vi.fn();
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(page("Before")))
@@ -296,6 +428,7 @@ describe("TurboLiteRuntime requests", () => {
     const runtime = new TurboLiteRuntime({
       baseUrl: "https://app.test",
       fetch,
+      navigation: { push, replace },
     });
     await runtime.visit("/cart");
     await runtime.submit({ action: "/save", entries: [], method: "post" });
@@ -303,15 +436,17 @@ describe("TurboLiteRuntime requests", () => {
     expect(fetch.mock.calls[2]?.[0]).toBe("https://app.test/cart");
     expect(fetch.mock.calls[2]?.[1].method).toBe("GET");
     expect(textContent(runtime.getSnapshot().tree)).toBe("After refresh");
+    expect(replace).toHaveBeenLastCalledWith("https://app.test/cart");
   });
 
   it("commits a POST redirect URL and reports it to host navigation", async () => {
-    const navigate = vi.fn();
+    const push = vi.fn();
+    const replace = vi.fn();
     const runtime = new TurboLiteRuntime({
       baseUrl: "https://app.test",
       fetch: async () =>
         response(page("Receipt"), { url: "https://app.test/orders/42" }),
-      navigation: { navigate },
+      navigation: { push, replace },
     });
     await runtime.submit({
       action: "/orders",
@@ -319,9 +454,8 @@ describe("TurboLiteRuntime requests", () => {
       method: "post",
     });
     expect(runtime.getSnapshot().url).toBe("https://app.test/orders/42");
-    expect(navigate).toHaveBeenCalledWith("https://app.test/orders/42", {
-      replace: false,
-    });
+    expect(push).toHaveBeenCalledWith("https://app.test/orders/42");
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("preserves the committed tree across 204, media, network, parse, and safety failures", async () => {
