@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm audit --omit=dev
+
+  coverage:
+    name: Coverage thresholds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  required:
+    name: Required CI
+    if: always()
+    needs: [check, coverage]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every gate
+        env:
+          RESULTS: ${{ toJson(needs) }}
+        run: |
+          node -e 'const needs=JSON.parse(process.env.RESULTS); if(Object.values(needs).some(job=>job.result!=="success")) process.exit(1)'

@@ -1,0 +1,52 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+const manifest = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
+const forbidden = ["expo-turbo", "noscrubs", "@acme/"];
+const dependencyNames = Object.keys({
+  ...manifest.dependencies,
+  ...manifest.optionalDependencies,
+  ...manifest.peerDependencies,
+});
+for (const name of dependencyNames) {
+  if (forbidden.some((needle) => name.toLowerCase().includes(needle))) {
+    throw new Error(`Forbidden package dependency: ${name}`);
+  }
+}
+
+const packed = JSON.parse(
+  execFileSync("npm", ["pack", "--json", "--dry-run", "--ignore-scripts"], {
+    encoding: "utf8",
+  }),
+)[0];
+const paths = packed.files.map((file) => file.path);
+for (const required of [
+  "dist/index.js",
+  "dist/index.d.ts",
+  "README.md",
+  "LICENSE",
+  "package.json",
+]) {
+  if (!paths.includes(required))
+    throw new Error(`Packed archive is missing ${required}`);
+}
+for (const path of paths) {
+  if (/^(src|test|example|scripts)\//.test(path) || path === "goal.md") {
+    throw new Error(`Development-only file leaked into package: ${path}`);
+  }
+}
+
+const root = await import(new URL("../dist/index.js", import.meta.url));
+for (const name of [
+  "TurboLiteProvider",
+  "TurboLiteRuntime",
+  "TurboLiteScreen",
+  "createComponentRenderer",
+]) {
+  if (!(name in root)) throw new Error(`Built entrypoint is missing ${name}`);
+}
+console.log(
+  `package-content: ${paths.length} files, ${packed.size} bytes packed`,
+);

@@ -1,0 +1,30 @@
+name: Bug report
+description: Provide a Rails response and native reproduction a coding agent can run.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the smallest markup, request, component adapter, and runnable steps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and platform
+      description: Package, React Native, React, Rails/Turbo, iOS or Android.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and proposed investigation
+      description: Share known non-goals, security constraints, logs, or a likely fix.
