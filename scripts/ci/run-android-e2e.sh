@@ -14,13 +14,14 @@ fi
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
-export PATH="$HOME/.local/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+export PATH="$HOME/.local/bin:$HOME/.bun/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 export MAESTRO_CLI_NO_ANALYTICS=1
 export MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
 
 readonly adb_serial="emulator-5580"
 readonly avd_name="expo-turbo-api35"
 readonly artifacts="$PWD/artifacts/android-device"
+readonly npm_version="11.5.2"
 mkdir -p "$artifacts"
 
 emulator_pid=""
@@ -37,8 +38,8 @@ cleanup() {
     echo "exit_status=$status"
     echo "commit=$(git rev-parse HEAD)"
     echo "runner=$(hostname)"
-    echo "node=$(node --version)"
-    echo "npm=$(npm --version)"
+    echo "bun=$(bun --version)"
+    echo "npm=$(bun x --package npm@${npm_version} npm --version)"
     echo "java=$(java -version 2>&1 | sed -n '1p')"
     echo "maestro=$(scripts/ci/check-maestro-version.sh)"
   } >"$artifacts/environment.txt" 2>&1 || true
@@ -47,13 +48,13 @@ cleanup() {
 trap cleanup EXIT
 
 scripts/ci/check-maestro-version.sh
-npm ci --no-audit
-npm run build
-npm ci --prefix example --ignore-scripts --no-audit
+bun x --package "npm@${npm_version}" npm ci --no-audit
+bun x --package "npm@${npm_version}" npm run build
+bun x --package "npm@${npm_version}" npm ci --prefix example --ignore-scripts --no-audit
 
 (
   cd example
-  npx expo prebuild --platform android --no-install --clean
+  bun x expo prebuild --platform android --no-install --clean
   cd android
   ./gradlew --no-daemon -PreactNativeArchitectures=x86_64 app:assembleRelease
 )
