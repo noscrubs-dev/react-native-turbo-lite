@@ -28,6 +28,8 @@ export {
   type SubmitOptions,
   type TurboLiteErrorHandler,
   type TurboLiteFetch,
+  type TurboLiteFormController,
+  type TurboLiteFormSubmission,
   type TurboLiteFrameController,
   type TurboLiteFrameLoading,
   type TurboLiteFrameSnapshot,

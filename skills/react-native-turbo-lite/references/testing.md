@@ -30,7 +30,7 @@ Rails response, and a device screenshot does not prove cancellation races.
 | Lazy Frame | No request before visibility; load after visibility |
 | Preload | UI/history unchanged; later load makes no second request |
 | GET form | Ordered fields encoded in URL; full document pushes |
-| POST form | URL-encoded body; document or Stream response applies |
+| POST form | URL-encoded body; form-local pending and immutable submission snapshot; document or Stream response applies |
 | Stream siblings | Source order and partial-failure behavior |
 | Unknown wrapper/leaf | Children fallback and monitored typed error |
 | Failure | Last committed UI remains; host error signal appears |

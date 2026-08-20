@@ -88,6 +88,19 @@ export interface TurboLiteScreenProps {
 
 export type FormEntry = readonly [name: string, value: string];
 
+export interface TurboLiteFormSubmission {
+  readonly action: string;
+  readonly entries: readonly FormEntry[];
+  readonly frame?: string;
+  readonly method: "get" | "post";
+}
+
+export interface TurboLiteFormController {
+  readonly pending: boolean;
+  readonly submission?: TurboLiteFormSubmission;
+  submit(): void;
+}
+
 export interface TurboLiteRuntimeOptions {
   fetch: TurboLiteFetch;
   navigation?: TurboLiteNavigationAdapter;

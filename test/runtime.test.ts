@@ -44,8 +44,9 @@ describe("TurboLiteRuntime requests", () => {
     expect((fetch.mock.calls[0]?.[1].signal as AbortSignal).aborted).toBe(true);
     second.resolve(response(page("New")));
     await newVisit;
-    first.resolve(response(page("Old")));
     await oldVisit;
+    first.resolve(response(page("Old")));
+    await Promise.resolve();
     expect(textContent(runtime.getSnapshot().tree)).toBe("New");
     expect(runtime.getSnapshot().url).toBe("https://app.test/new");
   });

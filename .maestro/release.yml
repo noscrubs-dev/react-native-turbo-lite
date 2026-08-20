@@ -25,6 +25,9 @@ appId: dev.turbolite.example
 - inputText: "Towels"
 - hideKeyboard
 - tapOn: "Run POST Stream"
+- assertVisible:
+    id: "post-form-pending"
+- assertVisible: "Submitting item=Towels"
 - assertVisible: "Saved by Stream"
 - assertVisible: "Towels"
 - assertVisible: "Unknown wrappers keep their children."

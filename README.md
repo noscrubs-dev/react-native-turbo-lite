@@ -46,11 +46,12 @@ inside the corresponding element and use its hook:
 
 - `useTurboLiteLink()` provides `follow()` and `pending` inside `<a>`.
 - `useTurboLiteField(name)` provides a string value and setter inside `<form>`.
-- `useTurboLiteForm()` provides `submit()` and `pending` inside `<form>`.
+- `useTurboLiteForm()` provides `submit()`, form-local `pending`, and an
+  immutable `submission` snapshot inside `<form>`.
 - `useTurboLiteFrame()` provides Frame state plus `preload()` and `load()`
   inside `<turbo-frame>`.
 
-Those four hooks cover the host integration points in `0.1.0`. Advanced hosts
+Those four hooks cover the host integration points in `0.1.1`. Advanced hosts
 can use `useTurboLiteRuntime()` directly.
 
 ## Lazy Frames and preloading

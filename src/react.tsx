@@ -17,6 +17,8 @@ import { normalizeTagName } from "./tags.js";
 import type {
   FormEntry,
   TurboLiteErrorHandler,
+  TurboLiteFormController,
+  TurboLiteFormSubmission,
   TurboLiteFrameController,
   TurboLiteProviderProps,
   TurboLiteRenderer,
@@ -65,10 +67,8 @@ class FormFields {
   }
 }
 
-interface FormValue {
+interface FormValue extends TurboLiteFormController {
   fields: FormFields;
-  pending: boolean;
-  submit(): void;
 }
 
 const FormContext = createContext<FormValue | undefined>(undefined);
@@ -351,11 +351,10 @@ function FormBoundary({
 }): ReactNode {
   const nearestFrame = useContext(FrameContext);
   const [fields] = useState(() => new FormFields());
-  const snapshot = useSyncExternalStore(
-    runtime.subscribe,
-    runtime.getSnapshot,
-    runtime.getSnapshot,
-  );
+  const [submission, setSubmission] = useState<
+    TurboLiteFormSubmission | undefined
+  >();
+  const submissionId = useRef(0);
   const action = typeof node.props.action === "string" ? node.props.action : "";
   const rawMethod =
     typeof node.props.method === "string"
@@ -369,6 +368,12 @@ function FormBoundary({
   const frame = targetedFrame(
     node.props.target ?? node.props["data-turbo-frame"],
     nearestFrame,
+  );
+  useEffect(
+    () => () => {
+      submissionId.current++;
+    },
+    [],
   );
   const submit = useCallback(() => {
     if (rawMethod !== "get" && rawMethod !== "post") {
@@ -394,16 +399,31 @@ function FormBoundary({
       );
       return;
     }
-    void runtime.submit({
+    const entries = Object.freeze(
+      fields
+        .entries()
+        .map(([name, value]) => Object.freeze([name, value] as FormEntry)),
+    );
+    const next = Object.freeze<TurboLiteFormSubmission>({
       action,
-      entries: fields.entries(),
+      entries,
       method,
       ...(frame === undefined ? {} : { frame }),
     });
+    const id = ++submissionId.current;
+    setSubmission(next);
+    void runtime.submit(next).finally(() => {
+      if (submissionId.current === id) setSubmission(undefined);
+    });
   }, [action, enctype, fields, frame, method, rawMethod, report, runtime, url]);
-  const value = useMemo(
-    () => ({ fields, pending: snapshot.pending, submit }),
-    [fields, snapshot.pending, submit],
+  const value = useMemo<FormValue>(
+    () => ({
+      fields,
+      pending: submission !== undefined,
+      submit,
+      ...(submission === undefined ? {} : { submission }),
+    }),
+    [fields, submission, submit],
   );
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
@@ -433,9 +453,13 @@ export function useTurboLiteField(
   return { setValue, value };
 }
 
-export function useTurboLiteForm(): Pick<FormValue, "pending" | "submit"> {
+export function useTurboLiteForm(): TurboLiteFormController {
   const value = useContext(FormContext);
   if (value === undefined)
     throw new Error("useTurboLiteForm requires a <form> ancestor");
-  return { pending: value.pending, submit: value.submit };
+  return {
+    pending: value.pending,
+    submit: value.submit,
+    ...(value.submission === undefined ? {} : { submission: value.submission }),
+  };
 }

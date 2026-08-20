@@ -50,6 +50,35 @@ function isAbort(error: unknown): boolean {
   );
 }
 
+function abortError(): Error {
+  const error = new Error("The request was aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(abortError());
+  }
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(abortError());
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", aborted);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", aborted);
+        reject(error);
+      },
+    );
+  });
+}
+
 function asError(error: unknown, url: string): TurboLiteError {
   if (error instanceof TurboLiteError) return error;
   return new TurboLiteError("network", "Turbo Lite request failed", {
@@ -306,15 +335,18 @@ export class TurboLiteRuntime {
     let url = src;
     try {
       url = this.#resolve(src);
-      const response = await this.#options.fetch(url, {
-        headers: {
-          Accept: "text/html, application/xhtml+xml",
-          "Turbo-Frame": frameId,
-        },
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-      });
+      const response = await abortable(
+        this.#options.fetch(url, {
+          headers: {
+            Accept: "text/html, application/xhtml+xml",
+            "Turbo-Frame": frameId,
+          },
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal,
+        }),
+        controller.signal,
+      );
       if (!this.#ownsPreload(frameId, generation, src)) return;
       if (response.status === 204) {
         this.#setFrameState(frameId, "idle");
@@ -407,12 +439,15 @@ export class TurboLiteRuntime {
     try {
       const headers = new Headers(init.headers);
       if (target.frame !== undefined) headers.set("Turbo-Frame", target.frame);
-      const response = await this.#options.fetch(url, {
-        ...init,
-        headers,
-        redirect: "follow",
-        signal: controller.signal,
-      });
+      const response = await abortable(
+        this.#options.fetch(url, {
+          ...init,
+          headers,
+          redirect: "follow",
+          signal: controller.signal,
+        }),
+        controller.signal,
+      );
       if (!this.#owns(slot, id, generation)) return;
       await this.#applyResponse(response, url, target, () =>
         this.#owns(slot, id, generation),

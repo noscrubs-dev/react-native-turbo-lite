@@ -11,7 +11,7 @@ tests in this repository.
 | Eager and lazy Frames and `Turbo-Frame` request header | Supported | Host signals native visibility through `useTurboLiteFrame` |
 | Frame preload | Supported | Fetches and validates without committing UI or history; later load reuses it |
 | Nearest-Frame link/form targeting and `_top` | Supported | Named exact Frame targets also work |
-| GET and URL-encoded POST forms | Supported | Ordered/repeated entries via hooks |
+| GET and URL-encoded POST forms | Supported | Ordered/repeated entries plus form-local pending and immutable submission state via hooks |
 | Same-request Stream siblings | Supported | Document, link, Frame, or form response |
 | `append`, `prepend`, `replace`, `update`, `remove`, `before`, `after`, `refresh` | Supported | Exact ID only; source order |
 | Direct-child ID collision behavior | Supported | Existing matching direct child is replaced |

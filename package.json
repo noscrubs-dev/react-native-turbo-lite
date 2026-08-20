@@ -1,6 +1,6 @@
 {
   "name": "react-native-turbo-lite",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A small Rails Turbo document, Frame, form, and same-request Stream runtime for React Native",
   "type": "module",
   "sideEffects": false,

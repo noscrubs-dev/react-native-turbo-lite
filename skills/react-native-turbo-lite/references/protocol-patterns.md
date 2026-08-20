@@ -45,7 +45,7 @@ function NativeField({ name, label }: { name: string; label: string }) {
 }
 
 function NativeSubmit({ label }: { label: string }) {
-  const { submit, pending } = useTurboLiteForm()
+  const { submit, pending, submission } = useTurboLiteForm()
   return <Button title={label} disabled={pending} onPress={submit} />
 }
 ```
@@ -53,6 +53,12 @@ function NativeSubmit({ label }: { label: string }) {
 GET fields become query parameters. POST uses
 `application/x-www-form-urlencoded`; ordered and repeated fields are preserved.
 Files, multipart data, camera values, and payment objects stay host-owned.
+
+`pending` belongs only to the enclosing form. While it is true, `submission`
+contains a frozen snapshot of that request's action, method, ordered entries,
+and optional Frame target. Later field edits cannot change it. The snapshot
+clears when that submission succeeds, fails, or is cancelled; unrelated Frame
+or form requests do not toggle it.
 
 ## Frames
 

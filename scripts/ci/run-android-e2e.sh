@@ -21,6 +21,7 @@ export MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true
 readonly adb_serial="emulator-5580"
 readonly avd_name="expo-turbo-api35"
 readonly artifacts="$PWD/artifacts/android-device"
+readonly package_version="$(bun -e 'console.log(require("./package.json").version)')"
 mkdir -p "$artifacts"
 
 emulator_pid=""
@@ -49,6 +50,7 @@ scripts/ci/check-maestro-version.sh
 bun install --frozen-lockfile
 bun run build
 bun pm pack --ignore-scripts
+test -f "react-native-turbo-lite-${package_version}.tgz"
 
 (
   cd example

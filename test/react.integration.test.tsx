@@ -18,7 +18,7 @@ import {
   useTurboLiteFrame,
   useTurboLiteLink,
 } from "../src/index.js";
-import { response } from "./helpers.js";
+import { deferred, response } from "./helpers.js";
 
 function passthrough(type: string): ComponentType<Record<string, unknown>> {
   return function Passthrough({ children }) {
@@ -332,6 +332,194 @@ describe("React root adapter integration", () => {
     expect(await screen.findByText("Saved")).toBeTruthy();
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[1]?.[1].body).toBe("item=shirt&item=pants");
+  });
+
+  it("keeps pending and immutable submission values local to one form", async () => {
+    let observedSubmission: ReturnType<typeof useTurboLiteForm>["submission"];
+    function NativeInput({ label, name }: { label: string; name: string }) {
+      const field = useTurboLiteField(name);
+      return (
+        <input
+          aria-label={label}
+          onChange={(event) => field.setValue(event.currentTarget.value)}
+          value={field.value}
+        />
+      );
+    }
+    function NativeSubmit({ id, label }: { id: string; label: string }) {
+      const form = useTurboLiteForm();
+      if (id === "a") observedSubmission = form.submission;
+      const entries = form.submission?.entries
+        .map(([name, value]) => `${name}=${value}`)
+        .join("&");
+      return (
+        <div>
+          <button onClick={form.submit} type="button">
+            {label}
+          </button>
+          <span data-testid={`form-${id}`}>
+            {form.pending
+              ? `${form.submission?.method}:${form.submission?.action}:${entries}`
+              : "idle"}
+          </span>
+        </div>
+      );
+    }
+    function FrameControls() {
+      const frame = useTurboLiteFrame();
+      return (
+        <button onClick={() => void frame.load()} type="button">
+          Load panel
+        </button>
+      );
+    }
+    const formResponse = deferred<Response>();
+    const frameResponse = deferred<Response>();
+    const fetch = vi.fn(async (url: string) => {
+      if (url.endsWith("/save-a")) return formResponse.promise;
+      if (url.endsWith("/panel")) return frameResponse.promise;
+      return response(
+        '<Screen><form action="/save-a" method="post"><NativeInput name="item" label="Item A"/><NativeSubmit id="a" label="Submit A"/></form><form action="/save-b" method="post"><NativeInput name="item" label="Item B"/><NativeSubmit id="b" label="Submit B"/></form><turbo-frame id="panel" src="/panel" loading="lazy"><Text>Panel placeholder</Text><FrameControls/></turbo-frame><Text id="status">Ready</Text></Screen>',
+      );
+    });
+    const renderer = createComponentRenderer({
+      components: {
+        FrameControls,
+        NativeInput: NativeInput as ComponentType<Record<string, unknown>>,
+        NativeSubmit: NativeSubmit as ComponentType<Record<string, unknown>>,
+        Screen,
+        Text,
+      },
+    });
+    render(
+      <TurboLiteProvider
+        baseUrl="https://app.test"
+        fetch={fetch}
+        renderer={renderer}
+      >
+        <TurboLiteScreen url="/forms" />
+      </TurboLiteProvider>,
+    );
+
+    const input = (await screen.findByLabelText("Item A")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "shirt" } });
+    fireEvent.click(screen.getByText("Submit A"));
+    await waitFor(() =>
+      expect(screen.getByTestId("form-a").textContent).toBe(
+        "post:/save-a:item=shirt",
+      ),
+    );
+    expect(screen.getByTestId("form-b").textContent).toBe("idle");
+    expect(Object.isFrozen(observedSubmission)).toBe(true);
+    expect(Object.isFrozen(observedSubmission?.entries)).toBe(true);
+    expect(Object.isFrozen(observedSubmission?.entries[0])).toBe(true);
+
+    fireEvent.change(input, { target: { value: "pants" } });
+    expect(screen.getByTestId("form-a").textContent).toBe(
+      "post:/save-a:item=shirt",
+    );
+    fireEvent.click(screen.getByText("Load panel"));
+    expect(screen.getByTestId("form-a").textContent).toBe(
+      "post:/save-a:item=shirt",
+    );
+    expect(screen.getByTestId("form-b").textContent).toBe("idle");
+
+    frameResponse.resolve(
+      response(
+        '<Screen><turbo-frame id="panel"><Text>Panel loaded</Text></turbo-frame></Screen>',
+      ),
+    );
+    expect(await screen.findByText("Panel loaded")).toBeTruthy();
+    expect(screen.getByTestId("form-a").textContent).toBe(
+      "post:/save-a:item=shirt",
+    );
+
+    formResponse.resolve(
+      response(
+        '<turbo-stream action="update" target="status"><template><Text>Saved</Text></template></turbo-stream>',
+        { contentType: "text/vnd.turbo-stream.html" },
+      ),
+    );
+    expect(await screen.findByText("Saved")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByTestId("form-a").textContent).toBe("idle"),
+    );
+  });
+
+  it("does not let an older cancelled submit clear a newer submission", async () => {
+    function NativeInput({ name }: { name: string }) {
+      const field = useTurboLiteField(name);
+      return (
+        <input
+          aria-label={name}
+          onChange={(event) => field.setValue(event.currentTarget.value)}
+          value={field.value}
+        />
+      );
+    }
+    function NativeSubmit() {
+      const form = useTurboLiteForm();
+      return (
+        <div>
+          <button onClick={form.submit} type="button">
+            Submit
+          </button>
+          <span data-testid="submission-value">
+            {form.submission?.entries[0]?.[1] ?? "idle"}
+          </span>
+        </div>
+      );
+    }
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const errors: string[] = [];
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><form action="/save" method="post"><NativeInput name="item"/><NativeSubmit/></form></Screen>',
+        ),
+      )
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const renderer = createComponentRenderer({
+      components: {
+        NativeInput: NativeInput as ComponentType<Record<string, unknown>>,
+        NativeSubmit,
+        Screen,
+      },
+    });
+    render(
+      <TurboLiteProvider
+        baseUrl="https://app.test"
+        fetch={fetch}
+        onError={(error) => errors.push(error.code)}
+        renderer={renderer}
+      >
+        <TurboLiteScreen url="/form" />
+      </TurboLiteProvider>,
+    );
+
+    const input = (await screen.findByLabelText("item")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "first" } });
+    fireEvent.click(screen.getByText("Submit"));
+    await waitFor(() =>
+      expect(screen.getByTestId("submission-value").textContent).toBe("first"),
+    );
+    fireEvent.change(input, { target: { value: "second" } });
+    fireEvent.click(screen.getByText("Submit"));
+    await waitFor(() =>
+      expect(screen.getByTestId("submission-value").textContent).toBe("second"),
+    );
+
+    first.resolve(response("<Screen>stale</Screen>"));
+    await Promise.resolve();
+    expect(screen.getByTestId("submission-value").textContent).toBe("second");
+    second.resolve(response("{}", { contentType: "application/json" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("submission-value").textContent).toBe("idle"),
+    );
+    expect(errors).toContain("media-type");
   });
 
   it("reports unsupported form methods without sending a wrong request", async () => {

@@ -43,9 +43,24 @@ function Field({ name, placeholder }: { name: string; placeholder?: string }) {
   );
 }
 
-function Submit({ label }: { label: string }) {
-  const { pending, submit } = useTurboLiteForm();
-  return <Button disabled={pending} onPress={submit} title={label} />;
+function Submit({ label, stateId }: { label: string; stateId: string }) {
+  const { pending, submission, submit } = useTurboLiteForm();
+  const state = pending
+    ? `Submitting ${submission?.entries
+        .map(([name, value]) => `${name}=${value}`)
+        .join("&")}`
+    : "Form idle";
+  return (
+    <View>
+      <Button disabled={pending} onPress={submit} title={label} />
+      <Text
+        accessibilityLabel={state}
+        testID={`${stateId}-${pending ? "pending" : "idle"}`}
+      >
+        {state}
+      </Text>
+    </View>
+  );
 }
 
 function FrameControls() {
@@ -94,10 +109,10 @@ const documents: Record<string, string> = {
         </turbo-frame>
       </Panel>
       <form action="/search" method="get">
-        <Field name="q" placeholder="Search query"/><Submit label="Run GET form"/>
+        <Field name="q" placeholder="Search query"/><Submit label="Run GET form" stateId="get-form"/>
       </form>
       <form action="/items" method="post">
-        <Field name="item" placeholder="Laundry item"/><Submit label="Run POST Stream"/>
+        <Field name="item" placeholder="Laundry item"/><Submit label="Run POST Stream" stateId="post-form"/>
       </form>
       <Text id="status">Ready</Text>
       <Panel id="items"><Text>Shirts</Text></Panel>
@@ -122,6 +137,7 @@ const documents: Record<string, string> = {
 async function demoFetch(input: string, init: RequestInit): Promise<Response> {
   const url = new URL(input);
   if (url.pathname === "/items" && init.method === "POST") {
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
     return new Response(
       '<turbo-stream action="replace" target="status"><template><Text id="status">Saved by Stream</Text></template></turbo-stream>' +
         '<turbo-stream action="append" target="items"><template><Text id="new-item">Towels</Text></template></turbo-stream>',
