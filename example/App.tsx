@@ -48,9 +48,10 @@ function Submit({ label }: { label: string }) {
 
 function FrameControls() {
   const frame = useTurboLiteFrame();
+  const stateLabel = `lazy: ${frame.state}`;
   return (
     <View style={styles.frameControls}>
-      <Text>{`lazy: ${frame.state}`}</Text>
+      <Text accessibilityLabel={stateLabel}>{stateLabel}</Text>
       <Button onPress={() => void frame.preload()} title="Preload lazy Frame" />
       <Button onPress={() => void frame.load()} title="Load lazy Frame" />
     </View>
@@ -160,11 +161,13 @@ export default function App() {
     setHistory(next);
     setScreenUrl(next.at(-1) ?? initialUrl);
   };
+  const historyLabel = `Native history: ${history.length}`;
+  const errorLabel = `Last error: ${lastError}`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.hostBar}>
-        <Text>{`Native history: ${history.length}`}</Text>
+        <Text accessibilityLabel={historyLabel}>{historyLabel}</Text>
         <Button disabled={history.length <= 1} onPress={goBack} title="Back" />
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -177,7 +180,7 @@ export default function App() {
         >
           <TurboLiteScreen url={screenUrl} />
         </TurboLiteProvider>
-        <Text>{`Last error: ${lastError}`}</Text>
+        <Text accessibilityLabel={errorLabel}>{errorLabel}</Text>
       </ScrollView>
     </SafeAreaView>
   );
