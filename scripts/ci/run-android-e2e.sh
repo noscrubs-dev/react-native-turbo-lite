@@ -51,10 +51,17 @@ scripts/ci/check-maestro-version.sh
 bun x --package "npm@${npm_version}" npm ci --no-audit
 bun x --package "npm@${npm_version}" npm run build
 bun x --package "npm@${npm_version}" npm pack --ignore-scripts
-bun x --package "npm@${npm_version}" npm ci --prefix example --ignore-scripts --no-audit
 
 (
   cd example
+  bun x --package "npm@${npm_version}" npm install \
+    ../react-native-turbo-lite-0.1.0.tgz \
+    --save-exact \
+    --package-lock-only \
+    --force \
+    --ignore-scripts \
+    --no-audit
+  bun x --package "npm@${npm_version}" npm ci --ignore-scripts --no-audit
   NODE_ENV=production bun x expo prebuild --platform android --no-install --clean
   cd android
   NODE_ENV=production \
