@@ -52,7 +52,7 @@ function FrameControls() {
   const frame = useTurboLiteFrame();
   return (
     <View style={styles.frameControls}>
-      <Text accessibilityLabel="lazy-frame-state">lazy: {frame.state}</Text>
+      <Text>lazy: {frame.state}</Text>
       <Button onPress={() => void frame.preload()} title="Preload lazy Frame" />
       <Button onPress={() => void frame.load()} title="Load lazy Frame" />
     </View>
@@ -166,9 +166,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.hostBar}>
-        <Text accessibilityLabel="history-depth">
-          Native history: {history.length}
-        </Text>
+        <Text>Native history: {history.length}</Text>
         <Button disabled={history.length <= 1} onPress={goBack} title="Back" />
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -181,7 +179,7 @@ export default function App() {
         >
           <TurboLiteScreen url={screenUrl} />
         </TurboLiteProvider>
-        <Text accessibilityLabel="last-error">Last error: {lastError}</Text>
+        <Text>Last error: {lastError}</Text>
       </ScrollView>
     </SafeAreaView>
   );
