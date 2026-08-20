@@ -10,9 +10,11 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
     ignore:
-      - dependency-name: react-native
+      - dependency-name: "*"
         update-types:
           - version-update:semver-major
+      - dependency-name: react-native
+        update-types:
           - version-update:semver-minor
   - package-ecosystem: github-actions
     directory: /
