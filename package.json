@@ -75,7 +75,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.2.8",
     "react-native": "^0.81.6",
-    "typescript": "^5.8.0",
+    "typescript": "^7.0.2",
     "vitest": "^3.2.0"
   },
   "packageManager": "npm@11.5.2"
