@@ -23,11 +23,9 @@ import {
   useTurboLiteLink,
 } from "react-native-turbo-lite";
 
-function LinkButton({ children }: { children?: ReactNode }) {
+function LinkButton({ label }: { label: string }) {
   const { follow, pending } = useTurboLiteLink();
-  return (
-    <Button disabled={pending} onPress={follow} title={String(children)} />
-  );
+  return <Button disabled={pending} onPress={follow} title={label} />;
 }
 
 function Field({ name, placeholder }: { name: string; placeholder?: string }) {
@@ -52,7 +50,7 @@ function FrameControls() {
   const frame = useTurboLiteFrame();
   return (
     <View style={styles.frameControls}>
-      <Text>lazy: {frame.state}</Text>
+      <Text>{`lazy: ${frame.state}`}</Text>
       <Button onPress={() => void frame.preload()} title="Preload lazy Frame" />
       <Button onPress={() => void frame.load()} title="Load lazy Frame" />
     </View>
@@ -76,7 +74,7 @@ const documents: Record<string, string> = {
     <Screen>
       <Title>Turbo Lite release example</Title>
       <Text>Home document</Text>
-      <a href="/details"><LinkButton>Open details</LinkButton></a>
+      <a href="/details"><LinkButton label="Open details" /></a>
       <Panel>
         <Text>Eager Frame</Text>
         <turbo-frame id="eager-summary" src="/eager-summary"><Text>Eager placeholder</Text></turbo-frame>
@@ -166,7 +164,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.hostBar}>
-        <Text>Native history: {history.length}</Text>
+        <Text>{`Native history: ${history.length}`}</Text>
         <Button disabled={history.length <= 1} onPress={goBack} title="Back" />
       </View>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -179,7 +177,7 @@ export default function App() {
         >
           <TurboLiteScreen url={screenUrl} />
         </TurboLiteProvider>
-        <Text>Last error: {lastError}</Text>
+        <Text>{`Last error: ${lastError}`}</Text>
       </ScrollView>
     </SafeAreaView>
   );
