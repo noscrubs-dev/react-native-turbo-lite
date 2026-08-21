@@ -32,16 +32,17 @@ release work, read [references/testing.md](references/testing.md).
 
 - Keep one application-owned component map at the root. Do not create a
   per-screen registry.
-- Keep `fetch`, `renderer`, `navigation`, and `onError` identities stable across
-  ordinary host rerenders. Inline adapters can recreate the Screen runtime and
-  lose in-flight or local state.
+- Keep `fetch`, `renderer`, and `onError` identities stable across ordinary
+  host rerenders. Inline values can recreate the Screen runtime and lose
+  in-flight or local state.
 - Treat `TurboLiteScreen.url` as host-owned state. Initial loads and later prop
   synchronization must not add history.
-- Use native `push` after a successful user link or full-document form visit,
-  without committing the destination into the cached source runtime. Bind the
-  optional prepared document to the exact destination entry when the router
-  supports in-memory entry state. Use `replace` only for refresh-style document
-  replacement. Frames and preload never mutate native history.
+- Use a first-party router route component. A full-document GET link or GET
+  form pushes its URL first, and the destination route owns the only document
+  GET. An unsafe form stays on the source route until it returns a validated
+  visit directive. Native GET redirects use a direct `replace` directive before
+  document loading; never commit a followed document and then replace. Frames,
+  refresh, and preload never mutate native history.
 - Put app authentication, tenant headers, retries, telemetry, and connectivity
   policy in the fetch adapter. Return ordinary `Response` objects, including
   valid 422 document responses.
@@ -50,8 +51,10 @@ release work, read [references/testing.md](references/testing.md).
 
 ## Use the high-level surface by default
 
-Prefer `TurboLiteProvider`, `TurboLiteScreen`, `createComponentRenderer`, and
-the four protocol hooks:
+Prefer `TurboLiteProvider`, the matching first-party route component,
+`createComponentRenderer`, and the four protocol hooks. Route components ship
+from `react-native-turbo-lite/expo-router`, `/react-navigation`, and
+`/react-router`.
 
 - `useTurboLiteLink()` inside an `<a>` boundary.
 - `useTurboLiteField(name)` and `useTurboLiteForm()` inside a `<form>`.
@@ -66,11 +69,11 @@ snapshots, preserve latest-request-wins behavior, and always call `dispose()`.
 Flag these before style or abstraction findings:
 
 - unstable provider adapters recreating the runtime;
-- a `replace` adapter used for ordinary user navigation, which destroys Back;
-- a prepared navigation response cached by URL, serialized into route params,
-  or applied to the source screen;
-- an exact-handoff claim for a router integration that cannot bind in-memory
-  data to one route entry before destination load;
+- ordinary user navigation implemented as `replace`, which destroys Back;
+- a user-owned history map, URL mapper, response-handoff cache, or route token
+  added instead of using a first-party route component;
+- a followed top-level GET/POST document treated as safely replayable; use the
+  negotiated visit directive before loading the destination document;
 - a lazy Frame with no real visibility path to `load()`;
 - preload treated as a render, navigation, or analytics impression;
 - mismatched or duplicate Frame/Stream target IDs;

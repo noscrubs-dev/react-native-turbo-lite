@@ -1,9 +1,9 @@
+import { Stack } from "expo-router";
 import React, {
   type ComponentType,
   type ReactNode,
   useCallback,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -18,9 +18,7 @@ import {
 } from "react-native";
 import {
   createComponentRenderer,
-  type TurboLitePreparedDocument,
   TurboLiteProvider,
-  TurboLiteScreen,
   useTurboLiteField,
   useTurboLiteForm,
   useTurboLiteFrame,
@@ -83,7 +81,9 @@ function FrameControls() {
 }
 
 function Screen({ children }: { children?: ReactNode }) {
-  return <View style={styles.screen}>{children}</View>;
+  return (
+    <ScrollView contentContainerStyle={styles.screen}>{children}</ScrollView>
+  );
 }
 
 function Title({ children }: { children?: ReactNode }) {
@@ -116,6 +116,9 @@ const documents: Record<string, string> = {
       <form action="/items" method="post">
         <Field name="item" placeholder="Laundry item"/><Submit label="Run POST Stream" stateId="post-form"/>
       </form>
+      <form action="/orders" method="post">
+        <Field name="note" placeholder="Order note"/><Submit label="Create order" stateId="visit-form"/>
+      </form>
       <Text id="status">Ready</Text>
       <Panel id="items"><Text>Shirts</Text></Panel>
       <FuturePanel><Text>Unknown wrappers keep their children.</Text></FuturePanel>
@@ -130,6 +133,11 @@ const documents: Record<string, string> = {
       <Title>GET form result</Title>
       <Text>The query value was encoded in the request URL.</Text>
     </Screen>`,
+  "/orders/42": `
+    <Screen>
+      <Title>Order 42</Title>
+      <Text>The visit directive pushed this route, which performed one GET.</Text>
+    </Screen>`,
   "/eager-summary": `
     <Screen><turbo-frame id="eager-summary"><Text>Eager Frame loaded</Text></turbo-frame></Screen>`,
   "/lazy-summary": `
@@ -138,6 +146,13 @@ const documents: Record<string, string> = {
 
 async function demoFetch(input: string, init: RequestInit): Promise<Response> {
   const url = new URL(input);
+  if (url.pathname === "/orders" && init.method === "POST") {
+    return new Response(JSON.stringify({ location: "/orders/42" }), {
+      headers: {
+        "Content-Type": "application/vnd.turbo-lite.visit+json",
+      },
+    });
+  }
   if (url.pathname === "/items" && init.method === "POST") {
     await new Promise((resolve) => setTimeout(resolve, 1_500));
     return new Response(
@@ -163,15 +178,6 @@ const components = {
 
 export default function App() {
   const initialUrl = "https://example.test/";
-  interface HistoryEntry {
-    key: number;
-    preparedDocument: TurboLitePreparedDocument | undefined;
-    url: string;
-  }
-  const nextEntryKey = useRef(1);
-  const [history, setHistory] = useState<HistoryEntry[]>([
-    { key: 0, preparedDocument: undefined, url: initialUrl },
-  ]);
   const [lastError, setLastError] = useState("none");
   const [requestCount, setRequestCount] = useState(0);
   const trackedFetch = useCallback(async (input: string, init: RequestInit) => {
@@ -183,45 +189,18 @@ export default function App() {
     [],
   );
   const renderer = useMemo(() => createComponentRenderer({ components }), []);
-  const navigation = useMemo(
-    () => ({
-      push(url: string, preparedDocument?: TurboLitePreparedDocument) {
-        const key = nextEntryKey.current++;
-        setHistory((current) => [...current, { key, preparedDocument, url }]);
-      },
-      replace(url: string, preparedDocument?: TurboLitePreparedDocument) {
-        const key = nextEntryKey.current++;
-        setHistory((current) => [
-          ...current.slice(0, -1),
-          { key, preparedDocument, url },
-        ]);
-      },
-    }),
-    [],
-  );
-  const goBack = () => {
-    if (history.length <= 1) return;
-    setHistory((current) => current.slice(0, -1));
-  };
-  const historyLabel = `Native history: ${history.length}`;
   const errorLabel = `Last error: ${lastError}`;
   const requestLabel = `Requests: ${requestCount}`;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <TurboLiteProvider
+      baseUrl={initialUrl}
+      fetch={trackedFetch}
+      onError={handleError}
+      renderer={renderer}
+    >
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.hostBar}>
-          <Text
-            accessibilityLabel={historyLabel}
-            testID={`history-depth-${history.length}`}
-          >
-            {historyLabel}
-          </Text>
-          <Button
-            disabled={history.length <= 1}
-            onPress={goBack}
-            title="Back"
-          />
           <Text
             accessibilityLabel={requestLabel}
             testID={`request-count-${requestCount}`}
@@ -229,35 +208,17 @@ export default function App() {
             {requestLabel}
           </Text>
         </View>
-        <TurboLiteProvider
-          baseUrl={initialUrl}
-          fetch={trackedFetch}
-          navigation={navigation}
-          onError={handleError}
-          renderer={renderer}
-        >
-          {history.map((entry, index) => (
-            <View
-              key={entry.key}
-              style={index === history.length - 1 ? undefined : styles.hidden}
-            >
-              <TurboLiteScreen
-                {...(entry.preparedDocument === undefined
-                  ? {}
-                  : { preparedDocument: entry.preparedDocument })}
-                url={entry.url}
-              />
-            </View>
-          ))}
-        </TurboLiteProvider>
+        <View style={styles.router}>
+          <Stack screenOptions={{ headerBackTitle: "Back" }} />
+        </View>
         <Text
           accessibilityLabel={errorLabel}
           testID={`last-error-${lastError}`}
         >
           {errorLabel}
         </Text>
-      </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </TurboLiteProvider>
   );
 }
 
@@ -268,7 +229,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  hidden: { display: "none" },
   input: {
     borderColor: "#9098a8",
     borderRadius: 8,
@@ -287,7 +247,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: StatusBar.currentHeight ?? 0,
   },
-  screen: { gap: 12 },
-  scroll: { gap: 16, padding: 16 },
+  router: { flex: 1 },
+  screen: { gap: 12, padding: 16 },
   title: { fontSize: 24, fontWeight: "700" },
 });

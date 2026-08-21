@@ -2,17 +2,21 @@
   "name": "react-native-turbo-lite-example",
   "version": "0.0.0",
   "private": true,
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "prebuild:android": "expo prebuild --platform android --clean"
   },
   "dependencies": {
+    "@expo/metro-runtime": "^57.0.12",
     "expo": "~57.0.14",
+    "expo-constants": "^57.0.13",
+    "expo-linking": "^57.0.7",
+    "expo-router": "^57.0.0",
     "react": "19.2.3",
     "react-native": "0.86.2",
-    "react-native-turbo-lite": "file:../react-native-turbo-lite-0.1.2.tgz"
+    "react-native-turbo-lite": "file:../react-native-turbo-lite-0.2.0.tgz"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

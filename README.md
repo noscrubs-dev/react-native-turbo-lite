@@ -13,152 +13,98 @@ framework.
 bun add react-native-turbo-lite
 ```
 
-## Root setup
+## Setup
 
 ```tsx
 const renderer = createComponentRenderer({ components })
-
-const navigation = {
-  // This minimal adapter is safe. Because it ignores the optional prepared
-  // document, the destination screen performs its own GET.
-  push: (url: string) => router.push(url),
-  replace: (url: string) => router.replace(url),
-}
 
 <TurboLiteProvider
   baseUrl="https://app.example.com"
   renderer={renderer}
   fetch={authenticatedFetch}
-  navigation={navigation}
   onError={reportError}
 >
-  <TurboLiteScreen url="/cart" />
+  <AppRouter />
 </TurboLiteProvider>
 ```
 
-`TurboLiteScreen` treats its `url` as host-owned state, so the initial load and
-later prop changes do not create another history entry. A successful link or
-full-document form submission calls `navigation.push`. A Turbo refresh calls
-`navigation.replace`. Frame requests never change native history.
+Choose one first-party route component below. It reads the current route,
+renders the document, and uses the router's public `push` and `replace` APIs.
+There is no application history map or response-handoff store to maintain.
 
 ### Expo Router
 
 ```tsx
-import { router, usePathname } from "expo-router"
+// app/index.tsx
+export { TurboLiteExpoIndexRoute as default } from "react-native-turbo-lite/expo-router"
 
-const apiOrigin = "https://app.example.com"
-const toAppRoute = (url: string) => {
-  const parsed = new URL(url)
-  return `${parsed.pathname}${parsed.search}`
-}
-const navigation = {
-  push: (url: string) => router.push(toAppRoute(url)),
-  replace: (url: string) => router.replace(toAppRoute(url)),
-}
-
-export default function TurboRoute() {
-  const pathname = usePathname()
-  const documentUrl = new URL(pathname, apiOrigin).href
-  return (
-    <TurboLiteProvider navigation={navigation} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
-      <TurboLiteScreen url={documentUrl} />
-    </TurboLiteProvider>
-  )
-}
+// app/[...__turboLitePath].tsx
+export { TurboLiteExpoRoute as default } from "react-native-turbo-lite/expo-router"
 ```
 
-If the document identity includes query parameters, include the route's current
-search params in `documentUrl`. Expo Router's `push` adds a stack entry and
-`replace` does not. See its [navigation guide](https://docs.expo.dev/router/basics/navigation/).
+Add `app/index.tsx` when Rails owns `/`; the catch-all handles every non-root
+document URL. Put these routes only in the URL space Rails owns. Static Expo
+routes continue to win over the catch-all. `__turboLitePath` is the reserved
+catch-all parameter name; other query parameters are preserved.
+
+For a static Rails-owned prefix, wrap both route components with the same
+`basePath`, for example `<TurboLiteExpoRoute basePath="/server" />`. Dynamic
+parent routes are not supported by this binding because Expo combines their
+path params with query params.
 
 ### React Navigation
 
 ```tsx
-import {
-  type RouteProp,
-  StackActions,
-  useNavigation,
-  useRoute,
-} from "@react-navigation/native"
+import { TurboLiteReactNavigationRoute } from "react-native-turbo-lite/react-navigation"
 
-type Routes = { TurboDocument: { url: string } }
-
-function TurboRoute() {
-  const host = useNavigation()
-  const route = useRoute<RouteProp<Routes, "TurboDocument">>()
-  const navigation = useMemo(() => ({
-    push: (url: string) => host.dispatch(StackActions.push("TurboDocument", { url })),
-    replace: (url: string) => host.dispatch(StackActions.replace("TurboDocument", { url })),
-  }), [host])
-
-  return (
-    <TurboLiteProvider navigation={navigation} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
-      <TurboLiteScreen url={route.params.url} />
-    </TurboLiteProvider>
-  )
-}
+<Stack.Screen
+  name="TurboDocument"
+  component={TurboLiteReactNavigationRoute}
+  initialParams={{ url: "/cart" }}
+/>
 ```
 
-Use a stack or native-stack navigator. React Navigation documents that `push`
-always adds a route, including another route with the same name. See its
-[stack actions](https://reactnavigation.org/docs/stack-actions/).
+Use a stack or native-stack navigator. The binding pushes another
+`TurboDocument` entry, including when the destination URL matches the current
+one.
 
 ### React Router on web
 
 ```tsx
-import { useLocation, useNavigate } from "react-router"
+import { TurboLiteReactRouterRoute } from "react-native-turbo-lite/react-router"
 
-const toAppRoute = (url: string) => {
-  const parsed = new URL(url)
-  return `${parsed.pathname}${parsed.search}`
-}
-
-function TurboRoute() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const navigation = useMemo(() => ({
-    push: (url: string) => navigate(toAppRoute(url)),
-    replace: (url: string) => navigate(toAppRoute(url), { replace: true }),
-  }), [navigate])
-
-  return (
-    <TurboLiteProvider navigation={navigation} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
-      <TurboLiteScreen url={`${location.pathname}${location.search}`} />
-    </TurboLiteProvider>
-  )
-}
+<Route path="*" element={<TurboLiteReactRouterRoute />} />
 ```
 
-In these examples, source screens and Back stay correct, and each pushed
-destination performs one GET.
+See [router integration and server responses](./docs/navigation.md) for the
+complete navigation contract.
 
-### Optional exact response handoff
+Upgrading from 0.1? Read [Migrating to 0.2](./docs/migrating-to-0.2.md).
 
-For a full-document push, Turbo Lite does not commit the response into the
-cached source screen. It supplies the already parsed response as the optional
-second argument to `push`:
+### What happens on a visit
 
-```tsx
-push(url, preparedDocument) {
-  const entry = { key: makeUniqueEntryKey(), url, preparedDocument }
-  nativeStack.push(entry)
-}
+From `/cart`, this server document:
 
-// Rendered by that exact entry—not looked up by URL.
-<TurboLiteScreen
-  url={entry.url}
-  preparedDocument={entry.preparedDocument}
-/>
+```xml
+<a href="/checkout"><CheckoutButton /></a>
 ```
 
-This exact-entry handoff makes the destination render without another GET and
-keeps Back state intact. Keep the opaque value in memory; do not serialize it,
-put it in route parameters, or cache it by URL. If a router cannot carry
-per-entry in-memory state, ignore the second argument. Turbo Lite preserves the
-source screen and safely refetches at the destination.
+pushes `/checkout`; the destination route performs one GET; Back returns to
+`/cart`. A `422` form document renders its validation errors on `/cart` without
+adding history. A successful unsafe form returns a small visit directive, and
+the destination route performs the only GET:
 
-See [native navigation handoff](./docs/navigation.md) for the adapter contract
-and router capability boundaries.
+```http
+Content-Type: application/vnd.turbo-lite.visit+json
+Cache-Control: no-store
+Vary: Accept
+
+{"location":"/orders/42","action":"push"}
+```
+
+Ordinary user visits use `push`. Unsafe-form directives default to `push`; a
+native GET redirect uses a `replace` directive before the destination document
+loads. Refresh, Frames, and Frame preloads do not add route history.
 
 ## Native interaction hooks
 
@@ -172,7 +118,7 @@ inside the corresponding element and use its hook:
 - `useTurboLiteFrame()` provides Frame state plus `preload()` and `load()`
   inside `<turbo-frame>`.
 
-Those four hooks cover the host integration points in `0.1.2`. Advanced hosts
+Those four hooks cover the normal component integration points. Advanced hosts
 can use `useTurboLiteRuntime()` directly.
 
 ## Lazy Frames and preloading
@@ -225,6 +171,8 @@ and lazy Frames, preloading, GET and POST forms, Streams, and error reporting.
 ## Public API
 
 - `TurboLiteProvider`, `TurboLiteScreen`
+- First-party route components for Expo Router, React Navigation, and React
+  Router
 - `createComponentRenderer`, `normalizeTagName`
 - `useTurboLiteLink`, `useTurboLiteField`, `useTurboLiteForm`,
   `useTurboLiteFrame`
@@ -237,8 +185,8 @@ and lazy Frames, preloading, GET and POST forms, Streams, and error reporting.
 - The last successful UI remains visible after network, media-type, parse,
   Frame, or safety-limit failures.
 - A stale or cancelled response cannot replace newer work.
-- A pushed full document cannot overwrite the cached source route. An invalid,
-  serialized, or wrong-URL prepared handoff reports an error and refetches.
+- A destination GET failure reports through `onError`; a newly mounted route
+  has no package UI until a document commits, and Back remains available.
 - Duplicate active IDs are rejected before commit.
 - Stream siblings apply in source order. Each target mutation is atomic;
   earlier successful siblings remain committed if a later action fails.
@@ -262,7 +210,7 @@ is required before calling an adoption release-ready.
 bun install --frozen-lockfile
 bun run check
 bun run test:coverage
-bun audit
+bun run audit:ci
 ```
 
 `bun run check` runs formatting and lint checks, strict TypeScript, unit and
@@ -272,3 +220,7 @@ self-hosted release runner. Publishing happens only from the GitHub release
 workflow; local checks never publish. The final registry upload intentionally
 uses npm CLI because npm trusted publishing authenticates that command through
 GitHub OIDC; all dependency, build, test, audit, and pack work uses Bun.
+
+`audit:ci` still fails on any unreviewed advisory. It explicitly ignores three
+current Expo/Metro build-tool advisories with no usable upstream fix; none is in
+the packed runtime dependency path.

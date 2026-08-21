@@ -1,74 +1,156 @@
-# Native navigation handoff
+# Router integration and server responses
 
-Turbo Lite separates fetching a destination document from committing it to a
-native route. This prevents a pushed document from replacing the cached source
-screen before the native router creates the destination entry.
+Turbo Lite ships route components for Expo Router, React Navigation, and React
+Router. They use each router's public URL APIs. Applications do not need a
+history mirror, visit IDs, response cache, or URL mapping callback.
 
-## Two safe adapter modes
+## Router setup
 
-The navigation adapter receives an optional opaque prepared document:
+### Expo Router
 
-```ts
-interface TurboLiteNavigationAdapter {
-  push(url: string, preparedDocument?: TurboLitePreparedDocument): void
-  replace(url: string, preparedDocument?: TurboLitePreparedDocument): void
-}
+```tsx
+// app/index.tsx
+export { TurboLiteExpoIndexRoute as default } from "react-native-turbo-lite/expo-router"
+
+// app/[...__turboLitePath].tsx
+export { TurboLiteExpoRoute as default } from "react-native-turbo-lite/expo-router"
 ```
 
-An adapter may choose either mode:
+Add the index route when Rails owns `/`; Expo catch-all routes do not match the
+root URL. Keep both inside the part of the route tree owned by Rails documents.
+Static Expo routes continue to take precedence. Reserve `__turboLitePath` for
+the catch-all route parameter; every other query parameter is preserved.
 
-1. **Exact handoff:** retain the value in memory on the exact new route entry
-   and pass it to that entry's `TurboLiteScreen`. The destination performs no
-   duplicate GET.
-2. **Safe fallback:** ignore the second argument and push only the URL. The
-   source remains correct and the destination performs one GET.
+For a static prefix such as `app/server`, wrap both components and pass
+`basePath="/server"`. Turbo Lite then requests `/server/...`. Dynamic parent
+routes are not supported by this binding because Expo exposes their path params
+in the same local object as query params.
 
-The fallback costs a request, but never guesses which screen owns a response.
+### React Navigation
 
-## Exact-entry requirement
+```tsx
+import { TurboLiteReactNavigationRoute } from "react-native-turbo-lite/react-navigation"
 
-Route URLs are not route identities. A stack can contain two entries with the
-same URL, redirects can change the destination URL, and two navigations can
-overlap. Therefore:
+<Stack.Screen
+  name="TurboDocument"
+  component={TurboLiteReactNavigationRoute}
+  initialParams={{ url: "/cart" }}
+/>
+```
 
-- allocate or use one stable key for each native stack entry;
-- store the prepared document only on that entry or in an in-memory store keyed
-  by that entry;
-- pass the original opaque object to `TurboLiteScreen`;
-- remove the entry and its handoff together when the router pops it;
-- never index prepared documents only by URL;
-- never serialize, persist, deep-link, or send the prepared document over a
-  native bridge.
+Use a stack or native-stack navigator. The binding discovers its registered
+screen name and pushes that screen again with the serializable `{ url }` param.
 
-An invalid or wrong-URL handoff emits a typed error and falls back to a GET.
-Reloads, cold starts, new tabs, and deep links always fetch normally.
+### React Router
 
-## Router capability boundary
+```tsx
+import { TurboLiteReactRouterRoute } from "react-native-turbo-lite/react-router"
 
-Turbo Lite's base adapter works with Expo Router, React Navigation, React
-Router, TanStack Router, and native navigation libraries because all can push a
-URL. Exact response reuse is a stronger capability: the host integration must
-bind in-memory data to the exact destination entry before that screen loads.
+<Route path="*" element={<TurboLiteReactRouterRoute />} />
+```
 
-Use exact handoff when the app owns such an entry store, as the release example
-does. For routers that expose only URL or serializable route parameters at the
-integration point, use the safe fallback until the app has an entry-keyed
-in-memory adapter. Do not put the opaque object in router params merely to avoid
-the fallback GET.
+All three bindings read `baseUrl` and the renderer from the nearest
+`TurboLiteProvider`. They preserve path, query, and hash while rejecting a
+destination on another origin.
 
-On web, a same-process client navigation may use an application-owned memory
-store plus the router's unique location key. Browser history serialization,
-SSR, hydration, reload, and new-tab navigation cannot carry this object and
-must fetch.
+## Navigation behavior
 
-## Commit order
+| Event | Document | Router history |
+| --- | --- | --- |
+| Route mount, deep link, reload | Destination performs one GET | No extra entry |
+| Back | Retained native entries resume; other routers GET the prior URL | No extra entry |
+| User follows a full-document link | Destination performs one GET | `push` |
+| Full-document GET form succeeds | Destination performs one GET | `push` |
+| GET returns a visit directive | Canonical destination performs one GET | `replace` |
+| Unsafe form returns a visit directive | Destination performs one GET | Directive action |
+| Unsafe form returns a `422` document | Errors render on the source route | No change |
+| Turbo Stream or Frame response | Current route updates | No change |
+| Turbo Stream refresh | Current document reloads in place | No change |
+| Unsafe form, Frame, or refresh returns `204` | Current document stays visible | No change |
+| Route-owned document GET returns `204` | Rejected and reported; route has no committed document | Already-pushed entry remains |
 
-For a pushed document, the runtime:
+Normal user navigation pushes before the destination GET, so Back keeps
+working. If that GET fails, `onError` reports it; a newly mounted route has no
+package UI until a document commits. Replace is only for an explicit directive.
+A failed or invalid form response must not add history.
 
-1. fetches, redirects, parses, and validates the response;
-2. leaves the source runtime unchanged;
-3. calls `navigation.push(finalUrl, preparedDocument)`;
-4. lets the destination `TurboLiteScreen` adopt that exact response.
+## Native navigation directives
 
-Refresh uses `replace`, while Frame visits and Frame preloads never change
-native history.
+A native `fetch` normally follows a `303` before application code can inspect
+its `Location`. Issuing another GET after that can consume one-request state,
+including a Rails flash, before the destination screen renders it. For native
+Turbo Lite requests, return a location-only directive instead:
+
+```http
+Content-Type: application/vnd.turbo-lite.visit+json
+
+{"location":"/orders/42","action":"push"}
+```
+
+`location` must resolve to the configured `baseUrl` origin. For an unsafe form,
+`action` is `push` or `replace`; omit it to use `push`. The binding changes the
+route, and the destination route performs the only GET.
+
+Use the same media type for a native GET redirect, but omit `action` or set it
+to `replace`:
+
+```http
+Content-Type: application/vnd.turbo-lite.visit+json
+Cache-Control: no-store
+Vary: Accept
+
+{"location":"/canonical-orders","action":"replace"}
+```
+
+This replaces the alias route before its document loads. A GET directive with
+`action: "push"` is rejected because it would leave an unnecessary alias entry.
+
+For an unsafe form, keep the normal browser/Turbo response as a `303 See Other`.
+Negotiate on the Turbo Lite visit media type rather than changing the browser
+contract:
+
+```ruby
+if request.accepts.include?(Mime::Type.lookup("application/vnd.turbo-lite.visit+json"))
+  response.set_header("Cache-Control", "no-store")
+  response.set_header("Vary", "Accept")
+  render json: { location: order_path(@order), action: "push" },
+         content_type: "application/vnd.turbo-lite.visit+json"
+else
+  redirect_to @order, status: :see_other
+end
+```
+
+For a canonical GET, use `replace`; keep the application's normal GET redirect
+status for browsers:
+
+```ruby
+if request.accepts.include?(Mime::Type.lookup("application/vnd.turbo-lite.visit+json"))
+  response.set_header("Cache-Control", "no-store")
+  response.set_header("Vary", "Accept")
+  render json: { location: canonical_orders_path, action: "replace" },
+         content_type: "application/vnd.turbo-lite.visit+json"
+else
+  redirect_to canonical_orders_path, status: :moved_permanently
+end
+```
+
+If a native unsafe-form request receives and follows a redirect, Turbo Lite
+fails closed and leaves the source document in place. A direct successful HTML
+document is also rejected: use a Stream, `204`, or the visit directive.
+
+A followed top-level GET document is also rejected when a router binding is
+active. Otherwise committing it and then replacing the route can remount the
+screen, issue a second GET, and consume one-request state. Negotiate the direct
+GET `replace` directive instead. Frame redirects remain document responses
+because they do not change router history.
+
+Validation remains a document response with status `422`; it is committed to
+the current route and never converted into a navigation directive.
+
+## Why there is no response handoff
+
+A URL is not a route-entry identity: the same URL may appear multiple times in
+one stack, requests may overlap, and browser history may be serialized. Binding
+an opaque response to the correct future entry would require application-owned
+tokens or a shadow history store. Turbo Lite avoids that failure mode. Router
+entries carry only URLs, and each destination performs one predictable GET.

@@ -48,3 +48,18 @@ appId: dev.turbolite.example
 - assertVisible: "GET form result"
 - tapOn: "Back"
 - assertVisible: "Home document"
+- scrollUntilVisible:
+    element:
+      text: "Create order"
+    direction: DOWN
+- tapOn: "Order note"
+- inputText: "Leave at reception"
+- hideKeyboard
+- tapOn: "Create order"
+- assertVisible: "Order 42"
+- assertVisible:
+    id: "request-count-8"
+- tapOn: "Back"
+- assertVisible: "Home document"
+- assertVisible:
+    id: "request-count-8"

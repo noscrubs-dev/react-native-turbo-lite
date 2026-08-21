@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["react", "react-native"]
   },
-  "include": ["./App.tsx", "./index.ts"]
+  "include": ["./App.tsx", "./app/**/*.tsx"]
 }

@@ -9,7 +9,6 @@ export {
   UnknownElementError,
 } from "./errors.js";
 export { parseDocument, parseStreamResponse } from "./parser.js";
-export type { TurboLitePreparedDocument } from "./prepared.js";
 export {
   TurboLiteProvider,
   TurboLiteScreen,

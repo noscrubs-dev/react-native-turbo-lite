@@ -50,7 +50,8 @@ function NativeSubmit({ label }: { label: string }) {
 }
 ```
 
-GET fields become query parameters. POST uses
+GET fields replace the form action's existing query with the submitted query,
+matching browser form behavior. POST uses
 `application/x-www-form-urlencoded`; ordered and repeated fields are preserved.
 Files, multipart data, camera values, and payment objects stay host-owned.
 
@@ -114,8 +115,8 @@ Turbo Lite supports same-response Stream actions targeting exact IDs:
 
 Keep IDs unique and stable within the active tree. Missing targets are typed
 diagnostics and no-ops. Siblings apply in source order; a later failure does not
-roll back earlier committed sibling actions. `refresh` replaces the current
-native history entry rather than pushing a duplicate.
+roll back earlier committed sibling actions. `refresh` reloads the current
+runtime in place without changing native history.
 
 Action Cable, WebSockets, CSS selectors, morphing, permanent elements, and
 custom actions are not implemented.

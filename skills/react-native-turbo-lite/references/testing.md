@@ -24,14 +24,15 @@ Rails response, and a device screenshot does not prove cancellation races.
 | Behavior | Required proof |
 | --- | --- |
 | Initial screen | One fetch; no native push/replace |
-| User link | Source stays unchanged; one push; destination renders; native Back returns without remounting source |
-| Prepared navigation handoff | Exact destination renders with no duplicate GET; missing, invalid, and wrong-URL handoffs refetch safely |
-| Refresh | Current document reloads; one replace; no duplicate Back entry |
+| User link | One push before fetch; destination GETs once; native Back returns to the retained source |
+| Router bindings | Expo Router, React Navigation, and React Router use only public router state and URL-only entries |
+| Native GET redirect | Direct replace directive; canonical route GETs once; followed document fails closed |
+| Refresh | Current document reloads in place; no duplicate Back entry |
 | Eager Frame | Automatic request with matching `Turbo-Frame` header |
 | Lazy Frame | No request before visibility; load after visibility |
 | Preload | UI/history unchanged; later load makes no second request |
-| GET form | Ordered fields encoded in URL; full document pushes |
-| POST form | URL-encoded body; form-local pending and immutable submission snapshot; document or Stream response applies |
+| GET form | Ordered fields replace the action query; full document pushes |
+| POST form | URL-encoded body; 422 stays on source; Stream applies; valid visit directive navigates; followed redirect fails closed |
 | Stream siblings | Source order and partial-failure behavior |
 | Unknown wrapper/leaf | Children fallback and monitored typed error |
 | Failure | Last committed UI remains; host error signal appears |
@@ -51,10 +52,10 @@ For the release example and native E2E:
 Selectors should use stable accessibility labels or test IDs. Test behavior,
 not debug-only state text. For push semantics, prove that a user visit can go
 Back with URL/document equality and retained source state. Count requests to
-prove an exact handoff does not issue a destination GET. Also test the
-one-argument adapter fallback so compatibility does not depend on handoff
-support. For lazy preload, prove the placeholder remains until load and that
-the request count stays unchanged on commit.
+prove the source does not prefetch and the destination issues exactly one GET.
+Prove malformed and cross-origin visit directives do not change history. For
+lazy preload, prove the placeholder remains until load and that the request
+count stays unchanged on commit.
 
 ## Diagnosing failures
 
@@ -62,14 +63,13 @@ Classify the failure before editing:
 
 - **Blank or stale UI:** inspect `onError`, media type, parser error, duplicate
   IDs, adapter identity churn, and request ownership.
-- **Back broken:** compare initial prop sync, user push, refresh replace, and
-  Frame history behavior separately. Confirm that a pushed document never
-  committed into the source runtime and that handoff ownership uses a route
-  entry key rather than URL equality.
+- **Back broken:** compare route mount, user push, visit-directive replace, and
+  Frame history behavior separately. Confirm ordinary navigation uses the
+  first-party binding's `push` path and never commits into the source runtime.
 - **Frame unchanged:** verify the request header, exact response Frame ID,
   current document generation, and visibility/load callback.
-- **Double request:** check eager plus manual load, preload identity, component
-  remounts, and provider adapter stability.
+- **Double request:** check router route remounts, followed unsafe redirects,
+  eager plus manual Frame load, preload identity, and Provider value stability.
 - **Form missing values:** ensure fields are inside the intended form boundary
   and preserve repeated names/order.
 - **Device-only failure:** test the packed package, React singleton resolution,

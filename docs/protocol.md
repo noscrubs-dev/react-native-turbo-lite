@@ -28,6 +28,33 @@ typed values. The hook receives the string value plus normalized tag, attribute
 name, and node path. Do not decode untrusted JSON without its own size/schema
 checks.
 
+## Visit directives
+
+The server may route the native app without sending a destination document
+twice:
+
+```http
+Content-Type: application/vnd.turbo-lite.visit+json
+
+{"location":"/orders/42","action":"push"}
+```
+
+`location` must be a string that resolves to the configured origin. For an
+unsafe form, `action` may be `push` or `replace` and defaults to `push`. For a
+top-level GET redirect, the action must be `replace` and defaults to `replace`.
+Extra keys, unknown actions, media types, cross-origin locations, and malformed
+JSON are rejected without adding history. Send `Cache-Control: no-store` and
+`Vary: Accept`; send a `422` document for validation errors instead.
+
+Do not return an ordinary redirect to a bound native route. Fetch follows it
+before Turbo Lite can inspect `Location`, and replacing after committing that
+response may remount and fetch it again. Keep ordinary redirects for browsers
+through content negotiation.
+
+A GET form follows browser semantics: its encoded controls replace the action
+URL's existing query rather than being appended to it. Ordered and repeated
+field values are preserved.
+
 ## Frames
 
 Every `turbo-frame` requires a unique, non-empty `id`. A `src` request includes

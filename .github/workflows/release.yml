@@ -33,6 +33,7 @@ jobs:
         run: $(bun pm bin -g)/npm --version
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run audit:ci
       - name: Verify release tag matches package version
         if: github.event_name == 'release'
         run: |

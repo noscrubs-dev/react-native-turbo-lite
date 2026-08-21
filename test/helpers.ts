@@ -1,8 +1,13 @@
 import type { TurboLiteNode } from "../src/index.js";
 
 export function response(
-  body: string,
-  options: { contentType?: string; status?: number; url?: string } = {},
+  body: string | null,
+  options: {
+    contentType?: string;
+    redirected?: boolean;
+    status?: number;
+    url?: string;
+  } = {},
 ): Response {
   const native = new Response(body, {
     headers: {
@@ -10,10 +15,12 @@ export function response(
     },
     status: options.status ?? 200,
   });
-  if (options.url === undefined) return native;
+  if (options.url === undefined && options.redirected === undefined)
+    return native;
   return new Proxy(native, {
     get(target, property, receiver) {
       if (property === "url") return options.url;
+      if (property === "redirected") return options.redirected ?? false;
       const value = Reflect.get(target, property, receiver);
       return typeof value === "function" ? value.bind(target) : value;
     },

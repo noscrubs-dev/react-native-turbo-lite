@@ -20,6 +20,7 @@ import type {
   TurboLiteFormController,
   TurboLiteFormSubmission,
   TurboLiteFrameController,
+  TurboLiteNavigationAdapter,
   TurboLiteProviderProps,
   TurboLiteRenderer,
   TurboLiteScreenProps,
@@ -29,7 +30,6 @@ interface ProviderValue {
   baseUrl?: string;
   fetch: NonNullable<TurboLiteProviderProps["fetch"]>;
   limits?: TurboLiteProviderProps["limits"];
-  navigation?: TurboLiteProviderProps["navigation"];
   onError?: TurboLiteErrorHandler;
   renderer: TurboLiteRenderer;
 }
@@ -78,7 +78,6 @@ export function TurboLiteProvider({
   children,
   fetch: fetchAdapter,
   limits,
-  navigation,
   onError,
   renderer,
 }: TurboLiteProviderProps): ReactNode {
@@ -91,10 +90,9 @@ export function TurboLiteProvider({
       renderer,
       ...(baseUrl === undefined ? {} : { baseUrl }),
       ...(limits === undefined ? {} : { limits }),
-      ...(navigation === undefined ? {} : { navigation }),
       ...(onError === undefined ? {} : { onError }),
     };
-  }, [baseUrl, fetchAdapter, limits, navigation, onError, renderer]);
+  }, [baseUrl, fetchAdapter, limits, onError, renderer]);
   return (
     <ProviderContext.Provider value={value}>
       {children}
@@ -144,10 +142,38 @@ export function useTurboLiteFrame(): TurboLiteFrameController {
   return { ...frame, load, preload };
 }
 
-export function TurboLiteScreen({
-  preparedDocument,
+export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
+  return <TurboLiteConfiguredScreen url={url} />;
+}
+
+/** Internal seam used by the first-party router entrypoints. */
+export function TurboLiteRouterScreen({
+  navigation,
   url,
-}: TurboLiteScreenProps): ReactNode {
+}: {
+  navigation: TurboLiteNavigationAdapter;
+  url: string;
+}): ReactNode {
+  return <TurboLiteConfiguredScreen navigation={navigation} url={url} />;
+}
+
+/** Internal provider seam used by the first-party router entrypoints. */
+export function useTurboLiteProviderBaseUrl(): string {
+  const config = useProvider();
+  if (config.baseUrl === undefined) {
+    throw new Error(
+      "Turbo Lite router bindings require an absolute TurboLiteProvider baseUrl",
+    );
+  }
+  return config.baseUrl;
+}
+
+function TurboLiteConfiguredScreen({
+  navigation,
+  url,
+}: TurboLiteScreenProps & {
+  navigation?: TurboLiteNavigationAdapter;
+}): ReactNode {
   const config = useProvider();
   const runtime = useMemo(
     () =>
@@ -155,12 +181,10 @@ export function TurboLiteScreen({
         fetch: config.fetch,
         ...(config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl }),
         ...(config.limits === undefined ? {} : { limits: config.limits }),
-        ...(config.navigation === undefined
-          ? {}
-          : { navigation: config.navigation }),
+        ...(navigation === undefined ? {} : { navigation }),
         ...(config.onError === undefined ? {} : { onError: config.onError }),
       }),
-    [config],
+    [config, navigation],
   );
   const snapshot = useSyncExternalStore(
     runtime.subscribe,
@@ -169,8 +193,8 @@ export function TurboLiteScreen({
   );
 
   useEffect(() => {
-    void runtime.load(url, preparedDocument);
-  }, [preparedDocument, runtime, url]);
+    void runtime.load(url);
+  }, [runtime, url]);
   useEffect(() => () => runtime.dispose(), [runtime]);
 
   return (

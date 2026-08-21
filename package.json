@@ -1,6 +1,6 @@
 {
   "name": "react-native-turbo-lite",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "A small Rails Turbo document, Frame, form, and same-request Stream runtime for React Native",
   "type": "module",
   "sideEffects": false,
@@ -11,6 +11,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./expo-router": {
+      "types": "./dist/expo-router.d.ts",
+      "import": "./dist/expo-router.js",
+      "default": "./dist/expo-router.js"
+    },
+    "./react-navigation": {
+      "types": "./dist/react-navigation.d.ts",
+      "import": "./dist/react-navigation.js",
+      "default": "./dist/react-navigation.js"
+    },
+    "./react-router": {
+      "types": "./dist/react-router.d.ts",
+      "import": "./dist/react-router.js",
+      "default": "./dist/react-router.js"
     },
     "./package.json": "./package.json"
   },
@@ -27,6 +42,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "audit:ci": "bun audit --ignore GHSA-w3rx-r6r6-pgpr --ignore GHSA-5p2g-fcmc-qvqq --ignore GHSA-w5hq-g745-h8pq",
     "example:check": "tsc -p example/tsconfig.check.json --noEmit",
     "package:check": "bun scripts/check-package.mjs",
     "pack:dry-run": "bun pm pack --dry-run",
@@ -54,11 +70,23 @@
     "node": ">=20.12"
   },
   "peerDependencies": {
-    "react": ">=18.3.0",
-    "react-native": ">=0.74.0"
+    "@react-navigation/native": ">=7.0.0",
+    "expo-router": ">=6.0.0",
+    "react": ">=18.2.0",
+    "react-native": ">=0.74.0",
+    "react-router": ">=7.0.0 <8.0.0"
   },
   "peerDependenciesMeta": {
+    "@react-navigation/native": {
+      "optional": true
+    },
+    "expo-router": {
+      "optional": true
+    },
     "react-native": {
+      "optional": true
+    },
+    "react-router": {
       "optional": true
     }
   },
@@ -67,15 +95,18 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
+    "@react-navigation/native": "^7.3.17",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.2.4",
     "@vitest/coverage-v8": "^3.2.0",
+    "expo-router": "^57.0.0",
     "happy-dom": "^20.11.6",
     "react": "^19.1.0",
     "react-dom": "^19.2.8",
     "react-native": "^0.81.6",
+    "react-router": "^7.9.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.0"
   },

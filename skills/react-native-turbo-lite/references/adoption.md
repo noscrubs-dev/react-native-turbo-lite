@@ -25,13 +25,12 @@ Do not hide these gaps behind adapters.
    component library, and current Rails response formats.
 2. Define the smallest component map required for one complete vertical flow.
    Reuse native design-system components; do not build a second UI system.
-3. Add a stable authenticated fetch adapter. Preserve redirects and return
-   `Response` for valid non-2xx documents such as 422 validation pages.
-4. Add stable `push` and `replace` adapters around the host router. Decide
-   explicitly whether the router can bind an in-memory prepared document to
-   the exact destination entry; otherwise use the safe destination-GET mode.
+3. Add a stable authenticated fetch adapter. Return `Response` for valid
+   non-2xx documents such as 422 validation pages.
+4. Mount the matching first-party Expo Router, React Navigation, or React
+   Router route component. Do not build a second history store or handoff cache.
 5. Create one stable renderer and one stable error callback.
-6. Mount `TurboLiteScreen` from host-owned URL state.
+6. Give the Provider an absolute `baseUrl`; the route component owns URL state.
 7. Add protocol-bound native controls through hooks.
 8. Prove the real server contract and packed native app before expanding the
    component map.
@@ -46,15 +45,6 @@ const renderer = useMemo(
   [],
 )
 
-const navigation = useMemo(
-  () => ({
-    // Ignoring the optional second argument is safe and causes one destination GET.
-    push: (url: string) => router.push(toAppRoute(url)),
-    replace: (url: string) => router.replace(toAppRoute(url)),
-  }),
-  [router],
-)
-
 const reportTurboError = useCallback((error: TurboLiteError) => {
   reportError(error, {
     code: error.code,
@@ -66,18 +56,31 @@ return (
   <TurboLiteProvider
     baseUrl={API_ORIGIN}
     fetch={authenticatedFetch}
-    navigation={navigation}
     onError={reportTurboError}
     renderer={renderer}
   >
-    <TurboLiteScreen url={currentUrl} />
+    <AppRouter />
   </TurboLiteProvider>
 )
 ```
 
+Then mount one package route component, for example an Expo Router catch-all:
+
+```tsx
+// app/index.tsx (when Rails owns /)
+export { TurboLiteExpoIndexRoute as default } from "react-native-turbo-lite/expo-router"
+
+// app/[...__turboLitePath].tsx
+export { TurboLiteExpoRoute as default } from "react-native-turbo-lite/expo-router"
+```
+
+For a static nested URL prefix, wrap both components with the same `basePath`.
+Dynamic Expo parent routes are unsupported by this binding because their path
+params collide with query-param reconstruction.
+
 Keep the adapter identities stable. In the current React surface, changing the
 provider configuration creates a new Screen runtime. An inline `onError`,
-renderer, navigation object, fetch wrapper, or limits object can therefore
+renderer, fetch wrapper, or limits object can therefore
 cancel work or reset state during an unrelated parent rerender.
 
 ## Navigation contract
@@ -88,23 +91,29 @@ The native router is the source of truth:
 | --- | --- |
 | Initial `TurboLiteScreen.url` | none |
 | Later host URL prop change or native Back sync | none |
-| Successful user link | push |
-| Successful full-document GET/POST form | push |
-| Turbo refresh Stream | replace |
+| User link or full-document GET form | push before the destination GET |
+| Native GET redirect directive | replace before the canonical GET |
+| Successful unsafe form visit directive | directive action, default push |
+| Turbo refresh Stream | none; reload current entry in place |
 | Frame load or preload | none |
 
-Do not call native navigation before a response is fetched, parsed, and
-validated. Failed, cancelled, or stale visits must leave both the screen and
-native history unchanged. For a push, the destination document must not be
-written into the cached source runtime.
+Router-first GET navigation means a network or parse failure happens on the new
+route; host error UI must make that visible, and Back returns to the preserved
+source entry. Unsafe POST navigation is response-first: malformed, failed, or
+cross-origin visit directives leave both UI and history unchanged. A `422`
+document renders on the source route. Frames never change history.
 
-To avoid the fallback destination GET, accept the optional prepared document in
-`push(url, preparedDocument)`, retain it in memory on the exact new route entry,
-and pass that same object to the destination `TurboLiteScreen`. Never store it
-by URL or serialize it into route params. Same-URL stack entries, redirects,
-overlapping navigation, reloads, and deep links make URL-keyed handoff unsafe.
-If the router cannot establish exact entry ownership before destination load,
-ignore the object and let the destination fetch.
+Successful top-level unsafe forms that navigate return
+`application/vnd.turbo-lite.visit+json` with
+`{"location":"/orders/42","action":"push"}`. Keep normal `303 See Other`
+responses for browsers and unmodified Turbo through content negotiation. Do
+not discard a followed POST redirect and issue another GET: that can consume
+one-request Rails flash state before the destination renders.
+
+Native GET redirects use the same media type with a `replace` action. Do not
+commit a followed top-level GET document and then replace the native route: a
+router may remount it and issue a second GET. Keep ordinary HTTP redirects for
+browsers through `Accept` negotiation.
 
 ## Fetch contract
 

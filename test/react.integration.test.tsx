@@ -11,7 +11,6 @@ import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createComponentRenderer,
-  type TurboLitePreparedDocument,
   TurboLiteProvider,
   TurboLiteScreen,
   UnknownElementError,
@@ -20,6 +19,7 @@ import {
   useTurboLiteFrame,
   useTurboLiteLink,
 } from "../src/index.js";
+import { TurboLiteRouterScreen } from "../src/react.js";
 import { deferred, response } from "./helpers.js";
 
 function passthrough(type: string): ComponentType<Record<string, unknown>> {
@@ -48,8 +48,6 @@ function Text({ accessibilityLabel, children }: Record<string, unknown>) {
 
 describe("React root adapter integration", () => {
   it("renders a screen from only its URL and uses the one root component map", async () => {
-    const push = vi.fn();
-    const replace = vi.fn();
     const renderer = createComponentRenderer({ components: { Screen, Text } });
     const fetch = vi.fn(async () =>
       response(
@@ -60,7 +58,6 @@ describe("React root adapter integration", () => {
       <TurboLiteProvider
         baseUrl="https://app.test"
         fetch={fetch}
-        navigation={{ push, replace }}
         renderer={renderer}
       >
         <TurboLiteScreen url="/cart" />
@@ -72,11 +69,9 @@ describe("React root adapter integration", () => {
       ),
     ).toBe("title");
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(push).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
   });
 
-  it("binds a prepared response to one pushed stack entry and preserves Back state", async () => {
+  it("pushes a URL-owned route entry and preserves Back state", async () => {
     let sourceMounts = 0;
     function StatefulSource() {
       useEffect(() => {
@@ -113,7 +108,6 @@ describe("React root adapter integration", () => {
 
     interface Entry {
       key: number;
-      preparedDocument: TurboLitePreparedDocument | undefined;
       url: string;
     }
     function StackApp() {
@@ -121,25 +115,18 @@ describe("React root adapter integration", () => {
       const [entries, setEntries] = useState<Entry[]>([
         {
           key: 0,
-          preparedDocument: undefined,
           url: "https://app.test/preferences",
         },
       ]);
       const navigation = useMemo(
         () => ({
-          push(url: string, preparedDocument?: TurboLitePreparedDocument) {
+          push(url: string) {
             const key = nextKey.current++;
-            setEntries((current) => [
-              ...current,
-              { key, preparedDocument, url },
-            ]);
+            setEntries((current) => [...current, { key, url }]);
           },
-          replace(url: string, preparedDocument?: TurboLitePreparedDocument) {
+          replace(url: string) {
             const key = nextKey.current++;
-            setEntries((current) => [
-              ...current.slice(0, -1),
-              { key, preparedDocument, url },
-            ]);
+            setEntries((current) => [...current.slice(0, -1), { key, url }]);
           },
         }),
         [],
@@ -148,7 +135,6 @@ describe("React root adapter integration", () => {
         <TurboLiteProvider
           baseUrl="https://app.test"
           fetch={fetch}
-          navigation={navigation}
           renderer={renderer}
         >
           <button
@@ -164,12 +150,7 @@ describe("React root adapter integration", () => {
               hidden={index !== entries.length - 1}
               key={entry.key}
             >
-              <TurboLiteScreen
-                {...(entry.preparedDocument === undefined
-                  ? {}
-                  : { preparedDocument: entry.preparedDocument })}
-                url={entry.url}
-              />
+              <TurboLiteRouterScreen navigation={navigation} url={entry.url} />
             </div>
           ))}
         </TurboLiteProvider>
