@@ -54,7 +54,8 @@ test -f "react-native-turbo-lite-${package_version}.tgz"
 
 (
   cd example
-  bun install --force --ignore-scripts
+  bun update react-native-turbo-lite --force --ignore-scripts
+  bun install --frozen-lockfile --ignore-scripts
   NODE_ENV=production bun x expo prebuild --platform android --no-install --clean
   cd android
   NODE_ENV=production \
