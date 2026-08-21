@@ -19,6 +19,8 @@ bun add react-native-turbo-lite
 const renderer = createComponentRenderer({ components })
 
 const navigation = {
+  // This minimal adapter is safe. Because it ignores the optional prepared
+  // document, the destination screen performs its own GET.
   push: (url: string) => router.push(url),
   replace: (url: string) => router.replace(url),
 }
@@ -39,6 +41,32 @@ later prop changes do not create another history entry. A successful link or
 full-document form submission calls `navigation.push`. A Turbo refresh calls
 `navigation.replace`. Frame requests never change native history.
 
+For a full-document push, Turbo Lite does not commit the response into the
+cached source screen. It supplies the already parsed response as the optional
+second argument to `push`:
+
+```tsx
+push(url, preparedDocument) {
+  const entry = { key: makeUniqueEntryKey(), url, preparedDocument }
+  nativeStack.push(entry)
+}
+
+// Rendered by that exact entry—not looked up by URL.
+<TurboLiteScreen
+  url={entry.url}
+  preparedDocument={entry.preparedDocument}
+/>
+```
+
+This exact-entry handoff makes the destination render without another GET and
+keeps Back state intact. Keep the opaque value in memory; do not serialize it,
+put it in route parameters, or cache it by URL. If a router cannot carry
+per-entry in-memory state, ignore the second argument. Turbo Lite preserves the
+source screen and safely refetches at the destination.
+
+See [native navigation handoff](./docs/navigation.md) for the adapter contract
+and router capability boundaries.
+
 ## Native interaction hooks
 
 Protocol elements are transparent boundaries. Put a mapped native component
@@ -51,7 +79,7 @@ inside the corresponding element and use its hook:
 - `useTurboLiteFrame()` provides Frame state plus `preload()` and `load()`
   inside `<turbo-frame>`.
 
-Those four hooks cover the host integration points in `0.1.1`. Advanced hosts
+Those four hooks cover the host integration points in `0.1.2`. Advanced hosts
 can use `useTurboLiteRuntime()` directly.
 
 ## Lazy Frames and preloading
@@ -116,6 +144,8 @@ and lazy Frames, preloading, GET and POST forms, Streams, and error reporting.
 - The last successful UI remains visible after network, media-type, parse,
   Frame, or safety-limit failures.
 - A stale or cancelled response cannot replace newer work.
+- A pushed full document cannot overwrite the cached source route. An invalid,
+  serialized, or wrong-URL prepared handoff reports an error and refetches.
 - Duplicate active IDs are rejected before commit.
 - Stream siblings apply in source order. Each target mutation is atomic;
   earlier successful siblings remain committed if a later action fails.

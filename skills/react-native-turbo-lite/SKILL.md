@@ -37,9 +37,11 @@ release work, read [references/testing.md](references/testing.md).
   lose in-flight or local state.
 - Treat `TurboLiteScreen.url` as host-owned state. Initial loads and later prop
   synchronization must not add history.
-- Use native `push` after committed user link or full-document form visits.
-  Use `replace` only for refresh-style document replacement. Frames and preload
-  never mutate native history.
+- Use native `push` after a successful user link or full-document form visit,
+  without committing the destination into the cached source runtime. Bind the
+  optional prepared document to the exact destination entry when the router
+  supports in-memory entry state. Use `replace` only for refresh-style document
+  replacement. Frames and preload never mutate native history.
 - Put app authentication, tenant headers, retries, telemetry, and connectivity
   policy in the fetch adapter. Return ordinary `Response` objects, including
   valid 422 document responses.
@@ -65,6 +67,10 @@ Flag these before style or abstraction findings:
 
 - unstable provider adapters recreating the runtime;
 - a `replace` adapter used for ordinary user navigation, which destroys Back;
+- a prepared navigation response cached by URL, serialized into route params,
+  or applied to the source screen;
+- an exact-handoff claim for a router integration that cannot bind in-memory
+  data to one route entry before destination load;
 - a lazy Frame with no real visibility path to `load()`;
 - preload treated as a render, navigation, or analytics impression;
 - mismatched or duplicate Frame/Stream target IDs;

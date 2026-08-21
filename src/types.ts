@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { TurboLitePreparedDocument } from "./prepared.js";
 
 export type TurboLiteNode =
   | string
@@ -40,10 +41,25 @@ export interface TurboLiteFetch {
 }
 
 export interface TurboLiteNavigationAdapter {
-  /** Called after a user-initiated full-document visit commits. */
-  push(url: string): void;
-  /** Called after a refresh-style full-document visit commits. */
-  replace(url: string): void;
+  /**
+   * Push a destination without changing the cached source screen.
+   *
+   * Exact-handoff adapters retain `preparedDocument` in memory for the new
+   * route entry and pass it to that entry's `TurboLiteScreen`. Adapters that
+   * ignore it remain correct, but the destination performs a fresh GET.
+   */
+  push(
+    url: string,
+    preparedDocument?: TurboLitePreparedDocument,
+  ): void | Promise<void>;
+  /**
+   * Replace the current native history entry after a refresh-style commit.
+   * The prepared document is supplied for routers that remount on replace.
+   */
+  replace(
+    url: string,
+    preparedDocument?: TurboLitePreparedDocument,
+  ): void | Promise<void>;
 }
 
 export interface RendererContext {
@@ -84,6 +100,8 @@ export interface TurboLiteProviderProps {
 
 export interface TurboLiteScreenProps {
   url: string;
+  /** Prepared response bound to this exact in-memory native route entry. */
+  preparedDocument?: TurboLitePreparedDocument;
 }
 
 export type FormEntry = readonly [name: string, value: string];

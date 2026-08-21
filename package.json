@@ -1,6 +1,6 @@
 {
   "name": "react-native-turbo-lite",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A small Rails Turbo document, Frame, form, and same-request Stream runtime for React Native",
   "type": "module",
   "sideEffects": false,
@@ -22,7 +22,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "lint": "biome check src test example scripts package.json tsconfig.json tsconfig.build.json biome.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

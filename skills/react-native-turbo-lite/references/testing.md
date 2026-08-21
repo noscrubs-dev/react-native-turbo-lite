@@ -24,7 +24,8 @@ Rails response, and a device screenshot does not prove cancellation races.
 | Behavior | Required proof |
 | --- | --- |
 | Initial screen | One fetch; no native push/replace |
-| User link | New document commits; one push; native Back returns |
+| User link | Source stays unchanged; one push; destination renders; native Back returns without remounting source |
+| Prepared navigation handoff | Exact destination renders with no duplicate GET; missing, invalid, and wrong-URL handoffs refetch safely |
 | Refresh | Current document reloads; one replace; no duplicate Back entry |
 | Eager Frame | Automatic request with matching `Turbo-Frame` header |
 | Lazy Frame | No request before visibility; load after visibility |
@@ -49,8 +50,11 @@ For the release example and native E2E:
 
 Selectors should use stable accessibility labels or test IDs. Test behavior,
 not debug-only state text. For push semantics, prove that a user visit can go
-Back; for lazy preload, prove the placeholder remains until load and that the
-request count stays unchanged on commit.
+Back with URL/document equality and retained source state. Count requests to
+prove an exact handoff does not issue a destination GET. Also test the
+one-argument adapter fallback so compatibility does not depend on handoff
+support. For lazy preload, prove the placeholder remains until load and that
+the request count stays unchanged on commit.
 
 ## Diagnosing failures
 
@@ -59,7 +63,9 @@ Classify the failure before editing:
 - **Blank or stale UI:** inspect `onError`, media type, parser error, duplicate
   IDs, adapter identity churn, and request ownership.
 - **Back broken:** compare initial prop sync, user push, refresh replace, and
-  Frame history behavior separately.
+  Frame history behavior separately. Confirm that a pushed document never
+  committed into the source runtime and that handoff ownership uses a route
+  entry key rather than URL equality.
 - **Frame unchanged:** verify the request header, exact response Frame ID,
   current document generation, and visibility/load callback.
 - **Double request:** check eager plus manual load, preload identity, component

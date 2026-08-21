@@ -4,12 +4,14 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type { ComponentType, ReactNode } from "react";
-import { createElement, useEffect } from "react";
+import { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createComponentRenderer,
+  type TurboLitePreparedDocument,
   TurboLiteProvider,
   TurboLiteScreen,
   UnknownElementError,
@@ -72,6 +74,122 @@ describe("React root adapter integration", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("binds a prepared response to one pushed stack entry and preserves Back state", async () => {
+    let sourceMounts = 0;
+    function StatefulSource() {
+      useEffect(() => {
+        sourceMounts++;
+      }, []);
+      return <span>Source state</span>;
+    }
+    function LinkButton({ children }: { children?: ReactNode }) {
+      const link = useTurboLiteLink();
+      return (
+        <button onClick={link.follow} type="button">
+          {children}
+        </button>
+      );
+    }
+    const renderer = createComponentRenderer({
+      components: {
+        LinkButton: LinkButton as ComponentType<Record<string, unknown>>,
+        Screen,
+        StatefulSource,
+        Text,
+      },
+    });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><Text>Preferences</Text><StatefulSource/><a href="/checkout"><LinkButton>Checkout</LinkButton></a></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response("<Screen><Text>Checkout</Text></Screen>"),
+      );
+
+    interface Entry {
+      key: number;
+      preparedDocument: TurboLitePreparedDocument | undefined;
+      url: string;
+    }
+    function StackApp() {
+      const nextKey = useRef(1);
+      const [entries, setEntries] = useState<Entry[]>([
+        {
+          key: 0,
+          preparedDocument: undefined,
+          url: "https://app.test/preferences",
+        },
+      ]);
+      const navigation = useMemo(
+        () => ({
+          push(url: string, preparedDocument?: TurboLitePreparedDocument) {
+            const key = nextKey.current++;
+            setEntries((current) => [
+              ...current,
+              { key, preparedDocument, url },
+            ]);
+          },
+          replace(url: string, preparedDocument?: TurboLitePreparedDocument) {
+            const key = nextKey.current++;
+            setEntries((current) => [
+              ...current.slice(0, -1),
+              { key, preparedDocument, url },
+            ]);
+          },
+        }),
+        [],
+      );
+      return (
+        <TurboLiteProvider
+          baseUrl="https://app.test"
+          fetch={fetch}
+          navigation={navigation}
+          renderer={renderer}
+        >
+          <button
+            disabled={entries.length === 1}
+            onClick={() => setEntries((current) => current.slice(0, -1))}
+            type="button"
+          >
+            Back
+          </button>
+          {entries.map((entry, index) => (
+            <div
+              data-testid={`entry-${entry.key}`}
+              hidden={index !== entries.length - 1}
+              key={entry.key}
+            >
+              <TurboLiteScreen
+                {...(entry.preparedDocument === undefined
+                  ? {}
+                  : { preparedDocument: entry.preparedDocument })}
+                url={entry.url}
+              />
+            </div>
+          ))}
+        </TurboLiteProvider>
+      );
+    }
+
+    render(<StackApp />);
+    const sourceEntry = screen.getByTestId("entry-0");
+    fireEvent.click(await within(sourceEntry).findByText("Checkout"));
+    const destinationEntry = await screen.findByTestId("entry-1");
+    expect(within(destinationEntry).getByText("Checkout")).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sourceMounts).toBe(1);
+
+    fireEvent.click(screen.getByText("Back"));
+    await waitFor(() => expect(screen.queryByTestId("entry-1")).toBeNull());
+    expect(within(sourceEntry).getByText("Preferences")).toBeTruthy();
+    expect(within(sourceEntry).getByText("Source state")).toBeTruthy();
+    expect(sourceMounts).toBe(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("lets a native Frame boundary preload before it commits lazy content", async () => {

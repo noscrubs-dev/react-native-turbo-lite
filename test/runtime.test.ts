@@ -12,20 +12,104 @@ const page = (text: string) =>
   `<Screen id="page"><Text>${text}</Text></Screen>`;
 
 describe("TurboLiteRuntime requests", () => {
-  it("loads a document, follows the final redirected URL, and tells host navigation", async () => {
+  it("hands a pushed document to its exact destination without mutating the source", async () => {
     const push = vi.fn();
     const replace = vi.fn();
-    const runtime = new TurboLiteRuntime({
-      baseUrl: "https://app.test/",
-      fetch: async () =>
+    const sourceFetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Preferences")))
+      .mockResolvedValueOnce(
         response(page("Cart"), { url: "https://app.test/cart/final" }),
+      );
+    const source = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: sourceFetch,
       navigation: { push, replace },
     });
-    await runtime.visit("/cart");
-    expect(textContent(runtime.getSnapshot().tree)).toBe("Cart");
-    expect(runtime.getSnapshot().url).toBe("https://app.test/cart/final");
-    expect(push).toHaveBeenCalledWith("https://app.test/cart/final");
+    await source.visit("/preferences", { history: "none" });
+    await source.visit("/cart");
+
+    expect(textContent(source.getSnapshot().tree)).toBe("Preferences");
+    expect(source.getSnapshot().url).toBe("https://app.test/preferences");
+    expect(push).toHaveBeenCalledTimes(1);
+    const [destinationUrl, preparedDocument] = push.mock.calls[0] ?? [];
+    expect(destinationUrl).toBe("https://app.test/cart/final");
+    expect(preparedDocument).toMatchObject({ url: destinationUrl });
     expect(replace).not.toHaveBeenCalled();
+
+    const destinationFetch = vi.fn();
+    const destination = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: destinationFetch,
+    });
+    await destination.load(destinationUrl, preparedDocument);
+    expect(textContent(destination.getSnapshot().tree)).toBe("Cart");
+    expect(destination.getSnapshot().url).toBe(destinationUrl);
+    expect(destinationFetch).not.toHaveBeenCalled();
+    expect(sourceFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("safely refetches when a navigation adapter ignores the prepared document", async () => {
+    let destinationUrl = "";
+    const sourceFetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Source")))
+      .mockResolvedValueOnce(response(page("Prepared destination")));
+    const source = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: sourceFetch,
+      navigation: {
+        push(url) {
+          destinationUrl = url;
+        },
+        replace() {},
+      },
+    });
+    await source.visit("/source", { history: "none" });
+    await source.visit("/destination");
+
+    const destinationFetch = vi.fn(async () => response(page("Refetched")));
+    const destination = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: destinationFetch,
+    });
+    await destination.load(destinationUrl);
+    expect(textContent(source.getSnapshot().tree)).toBe("Source");
+    expect(textContent(destination.getSnapshot().tree)).toBe("Refetched");
+    expect(destinationFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a prepared document for a different URL and safely refetches", async () => {
+    const push = vi.fn();
+    const source = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: async () => response(page("Prepared")),
+      navigation: { push, replace() {} },
+    });
+    await source.visit("/orders/1");
+    const preparedDocument = push.mock.calls[0]?.[1];
+
+    const errors: TurboLiteError[] = [];
+    const destinationFetch = vi.fn(async (_url: string) =>
+      response(page("Order 2")),
+    );
+    const destination = new TurboLiteRuntime({
+      baseUrl: "https://app.test/",
+      fetch: destinationFetch,
+      onError: (error) => errors.push(error),
+    });
+    await destination.load("/orders/2", preparedDocument);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({
+      code: "http",
+      url: "https://app.test/orders/2",
+    });
+    expect(destinationFetch).toHaveBeenCalledTimes(1);
+    expect(destinationFetch.mock.calls[0]?.[0]).toBe(
+      "https://app.test/orders/2",
+    );
+    expect(textContent(destination.getSnapshot().tree)).toBe("Order 2");
   });
 
   it("enforces latest-request-wins even when an aborted adapter resolves late", async () => {
@@ -431,16 +515,20 @@ describe("TurboLiteRuntime requests", () => {
       fetch,
       navigation: { push, replace },
     });
-    await runtime.visit("/cart");
+    await runtime.visit("/cart", { history: "none" });
     await runtime.submit({ action: "/save", entries: [], method: "post" });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch.mock.calls[2]?.[0]).toBe("https://app.test/cart");
     expect(fetch.mock.calls[2]?.[1].method).toBe("GET");
     expect(textContent(runtime.getSnapshot().tree)).toBe("After refresh");
-    expect(replace).toHaveBeenLastCalledWith("https://app.test/cart");
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0]?.[0]).toBe("https://app.test/cart");
+    expect(replace.mock.calls[0]?.[1]).toMatchObject({
+      url: "https://app.test/cart",
+    });
   });
 
-  it("commits a POST redirect URL and reports it to host navigation", async () => {
+  it("hands a POST redirect document to the destination without a duplicate GET", async () => {
     const push = vi.fn();
     const replace = vi.fn();
     const runtime = new TurboLiteRuntime({
@@ -454,9 +542,21 @@ describe("TurboLiteRuntime requests", () => {
       entries: [["item", "shirt"]],
       method: "post",
     });
-    expect(runtime.getSnapshot().url).toBe("https://app.test/orders/42");
-    expect(push).toHaveBeenCalledWith("https://app.test/orders/42");
+    expect(runtime.getSnapshot().tree).toBeUndefined();
+    expect(push).toHaveBeenCalledTimes(1);
+    const [destinationUrl, preparedDocument] = push.mock.calls[0] ?? [];
+    expect(destinationUrl).toBe("https://app.test/orders/42");
     expect(replace).not.toHaveBeenCalled();
+
+    const destinationFetch = vi.fn();
+    const destination = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch: destinationFetch,
+    });
+    await destination.load(destinationUrl, preparedDocument);
+    expect(destination.getSnapshot().url).toBe(destinationUrl);
+    expect(textContent(destination.getSnapshot().tree)).toBe("Receipt");
+    expect(destinationFetch).not.toHaveBeenCalled();
   });
 
   it("preserves the committed tree across 204, media, network, parse, and safety failures", async () => {

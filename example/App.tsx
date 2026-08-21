@@ -3,6 +3,7 @@ import React, {
   type ReactNode,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 import {
   createComponentRenderer,
+  type TurboLitePreparedDocument,
   TurboLiteProvider,
   TurboLiteScreen,
   useTurboLiteField,
@@ -161,9 +163,21 @@ const components = {
 
 export default function App() {
   const initialUrl = "https://example.test/";
-  const [history, setHistory] = useState([initialUrl]);
-  const [screenUrl, setScreenUrl] = useState(initialUrl);
+  interface HistoryEntry {
+    key: number;
+    preparedDocument: TurboLitePreparedDocument | undefined;
+    url: string;
+  }
+  const nextEntryKey = useRef(1);
+  const [history, setHistory] = useState<HistoryEntry[]>([
+    { key: 0, preparedDocument: undefined, url: initialUrl },
+  ]);
   const [lastError, setLastError] = useState("none");
+  const [requestCount, setRequestCount] = useState(0);
+  const trackedFetch = useCallback(async (input: string, init: RequestInit) => {
+    setRequestCount((current) => current + 1);
+    return demoFetch(input, init);
+  }, []);
   const handleError = useCallback(
     (error: { code: string }) => setLastError(error.code),
     [],
@@ -171,25 +185,27 @@ export default function App() {
   const renderer = useMemo(() => createComponentRenderer({ components }), []);
   const navigation = useMemo(
     () => ({
-      push(url: string) {
-        setHistory((current) => [...current, url]);
-        setScreenUrl(url);
+      push(url: string, preparedDocument?: TurboLitePreparedDocument) {
+        const key = nextEntryKey.current++;
+        setHistory((current) => [...current, { key, preparedDocument, url }]);
       },
-      replace(url: string) {
-        setHistory((current) => [...current.slice(0, -1), url]);
-        setScreenUrl(url);
+      replace(url: string, preparedDocument?: TurboLitePreparedDocument) {
+        const key = nextEntryKey.current++;
+        setHistory((current) => [
+          ...current.slice(0, -1),
+          { key, preparedDocument, url },
+        ]);
       },
     }),
     [],
   );
   const goBack = () => {
     if (history.length <= 1) return;
-    const next = history.slice(0, -1);
-    setHistory(next);
-    setScreenUrl(next.at(-1) ?? initialUrl);
+    setHistory((current) => current.slice(0, -1));
   };
   const historyLabel = `Native history: ${history.length}`;
   const errorLabel = `Last error: ${lastError}`;
+  const requestLabel = `Requests: ${requestCount}`;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -206,15 +222,33 @@ export default function App() {
             onPress={goBack}
             title="Back"
           />
+          <Text
+            accessibilityLabel={requestLabel}
+            testID={`request-count-${requestCount}`}
+          >
+            {requestLabel}
+          </Text>
         </View>
         <TurboLiteProvider
           baseUrl={initialUrl}
-          fetch={demoFetch}
+          fetch={trackedFetch}
           navigation={navigation}
           onError={handleError}
           renderer={renderer}
         >
-          <TurboLiteScreen url={screenUrl} />
+          {history.map((entry, index) => (
+            <View
+              key={entry.key}
+              style={index === history.length - 1 ? undefined : styles.hidden}
+            >
+              <TurboLiteScreen
+                {...(entry.preparedDocument === undefined
+                  ? {}
+                  : { preparedDocument: entry.preparedDocument })}
+                url={entry.url}
+              />
+            </View>
+          ))}
         </TurboLiteProvider>
         <Text
           accessibilityLabel={errorLabel}
@@ -234,6 +268,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  hidden: { display: "none" },
   input: {
     borderColor: "#9098a8",
     borderRadius: 8,

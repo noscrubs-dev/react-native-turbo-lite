@@ -27,7 +27,9 @@ Do not hide these gaps behind adapters.
    Reuse native design-system components; do not build a second UI system.
 3. Add a stable authenticated fetch adapter. Preserve redirects and return
    `Response` for valid non-2xx documents such as 422 validation pages.
-4. Add stable `push` and `replace` adapters around the host router.
+4. Add stable `push` and `replace` adapters around the host router. Decide
+   explicitly whether the router can bind an in-memory prepared document to
+   the exact destination entry; otherwise use the safe destination-GET mode.
 5. Create one stable renderer and one stable error callback.
 6. Mount `TurboLiteScreen` from host-owned URL state.
 7. Add protocol-bound native controls through hooks.
@@ -46,6 +48,7 @@ const renderer = useMemo(
 
 const navigation = useMemo(
   () => ({
+    // Ignoring the optional second argument is safe and causes one destination GET.
     push: (url: string) => router.push(toAppRoute(url)),
     replace: (url: string) => router.replace(toAppRoute(url)),
   }),
@@ -90,8 +93,18 @@ The native router is the source of truth:
 | Turbo refresh Stream | replace |
 | Frame load or preload | none |
 
-Do not call native navigation before a response commits. Failed, cancelled, or
-stale visits must leave both the screen and native history unchanged.
+Do not call native navigation before a response is fetched, parsed, and
+validated. Failed, cancelled, or stale visits must leave both the screen and
+native history unchanged. For a push, the destination document must not be
+written into the cached source runtime.
+
+To avoid the fallback destination GET, accept the optional prepared document in
+`push(url, preparedDocument)`, retain it in memory on the exact new route entry,
+and pass that same object to the destination `TurboLiteScreen`. Never store it
+by URL or serialize it into route params. Same-URL stack entries, redirects,
+overlapping navigation, reloads, and deep links make URL-keyed handoff unsafe.
+If the router cannot establish exact entry ownership before destination load,
+ignore the object and let the destination fetch.
 
 ## Fetch contract
 

@@ -7,8 +7,12 @@ appId: dev.turbolite.example
 - assertVisible: "Eager Frame loaded"
 - tapOn: "Open details"
 - assertVisible: "Details document"
+- assertVisible:
+    id: "request-count-3"
 - tapOn: "Back"
 - assertVisible: "Home document"
+- assertVisible:
+    id: "request-count-3"
 - assertVisible: "Lazy placeholder"
 - assertNotVisible: "Lazy Frame loaded from preload"
 - tapOn: "Preload lazy Frame"

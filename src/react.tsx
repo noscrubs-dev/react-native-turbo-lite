@@ -144,7 +144,10 @@ export function useTurboLiteFrame(): TurboLiteFrameController {
   return { ...frame, load, preload };
 }
 
-export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
+export function TurboLiteScreen({
+  preparedDocument,
+  url,
+}: TurboLiteScreenProps): ReactNode {
   const config = useProvider();
   const runtime = useMemo(
     () =>
@@ -166,8 +169,8 @@ export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
   );
 
   useEffect(() => {
-    void runtime.visit(url, { history: "none" });
-  }, [runtime, url]);
+    void runtime.load(url, preparedDocument);
+  }, [preparedDocument, runtime, url]);
   useEffect(() => () => runtime.dispose(), [runtime]);
 
   return (

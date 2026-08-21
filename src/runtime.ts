@@ -6,6 +6,11 @@ import {
   type StreamAction,
 } from "./internal.js";
 import { parseDocument, parseStreamResponse, resolveLimits } from "./parser.js";
+import {
+  createPreparedDocument,
+  preparedDocumentContents,
+  type TurboLitePreparedDocument,
+} from "./prepared.js";
 import { normalizeTagName } from "./tags.js";
 import {
   applyStreamAction,
@@ -141,6 +146,38 @@ export class TurboLiteRuntime {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   };
+
+  /** Load a route from its exact prepared response, or safely fetch it. */
+  async load(
+    input: string,
+    preparedDocument?: TurboLitePreparedDocument,
+  ): Promise<void> {
+    if (preparedDocument !== undefined) {
+      let url: string;
+      try {
+        url = this.#resolve(input);
+      } catch (error) {
+        this.#report(error, input);
+        return;
+      }
+      const parsed = preparedDocumentContents(preparedDocument);
+      if (parsed !== undefined && preparedDocument.url === url) {
+        await this.#commitDocument(parsed, url);
+        return;
+      }
+      this.#report(
+        new TurboLiteError(
+          "http",
+          parsed === undefined
+            ? "Turbo Lite prepared document is invalid or was serialized"
+            : `Prepared document URL does not match screen URL: ${preparedDocument.url}`,
+          { url },
+        ),
+        url,
+      );
+    }
+    await this.visit(input, { history: "none" });
+  }
 
   #emit(): void {
     const frames = Object.fromEntries(this.#frameStates);
@@ -407,22 +444,7 @@ export class TurboLiteRuntime {
     const slot =
       target.frame === undefined ? "document" : `frame:${target.frame}`;
     if (target.frame === undefined) {
-      this.#documentGeneration++;
-      for (const request of this.#requests.values()) request.controller.abort();
-      for (const request of this.#preloadRequests.values())
-        request.controller.abort();
-      this.#requests.clear();
-      this.#preloadRequests.clear();
-      this.#preparedFrames.clear();
-      for (const frame of this.#frameStates.values()) {
-        if (
-          frame.state === "loading" ||
-          frame.state === "preloading" ||
-          frame.state === "preloaded"
-        ) {
-          this.#setFrameState(frame.id, "idle");
-        }
-      }
+      this.#requests.get(slot)?.controller.abort();
     } else {
       this.#requests.get(slot)?.controller.abort();
       this.#preloadRequests.get(target.frame)?.controller.abort();
@@ -526,21 +548,47 @@ export class TurboLiteRuntime {
       };
       this.#emit();
     } else {
-      this.#frameStates.clear();
-      this.#tree = parsed.tree;
-      this.#syncFrames();
-      this.#snapshot = {
-        ...this.#snapshot,
-        revision: this.#snapshot.revision + 1,
-        url: finalUrl,
-      };
-      this.#emit();
-      if (target.history === "push") this.#options.navigation?.push(finalUrl);
-      if (target.history === "replace")
-        this.#options.navigation?.replace(finalUrl);
+      const preparedDocument = createPreparedDocument(finalUrl, parsed);
+      if (target.history === "push" && this.#options.navigation !== undefined) {
+        await this.#options.navigation.push(finalUrl, preparedDocument);
+        return;
+      }
+      await this.#commitDocument(parsed, finalUrl, true);
+      if (target.history === "replace") {
+        await this.#options.navigation?.replace(finalUrl, preparedDocument);
+      }
     }
-    await this.#applyStreams(parsed.streams, finalUrl);
+    if (target.frame !== undefined)
+      await this.#applyStreams(parsed.streams, finalUrl);
     if (ownsRequest()) this.#scheduleEagerFrames(target.frame);
+  }
+
+  async #commitDocument(
+    parsed: ParsedDocument,
+    url: string,
+    keepCurrentDocumentRequest = false,
+  ): Promise<void> {
+    this.#documentGeneration++;
+    for (const [slot, request] of this.#requests) {
+      if (keepCurrentDocumentRequest && slot === "document") continue;
+      request.controller.abort();
+      this.#requests.delete(slot);
+    }
+    for (const request of this.#preloadRequests.values())
+      request.controller.abort();
+    this.#preloadRequests.clear();
+    this.#preparedFrames.clear();
+    this.#frameStates.clear();
+    this.#tree = parsed.tree;
+    this.#syncFrames();
+    this.#snapshot = {
+      ...this.#snapshot,
+      revision: this.#snapshot.revision + 1,
+      url,
+    };
+    this.#emit();
+    await this.#applyStreams(parsed.streams, url);
+    this.#scheduleEagerFrames();
   }
 
   async #applyStreams(
