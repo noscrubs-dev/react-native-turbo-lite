@@ -154,7 +154,8 @@ async function demoFetch(input: string, init: RequestInit): Promise<Response> {
     });
   }
   if (url.pathname === "/items" && init.method === "POST") {
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    // Keep the pending state observable to a real-device automation client.
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
     return new Response(
       '<turbo-stream action="replace" target="status"><template><Text id="status">Saved by Stream</Text></template></turbo-stream>' +
         '<turbo-stream action="append" target="items"><template><Text id="new-item">Towels</Text></template></turbo-stream>',
