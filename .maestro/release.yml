@@ -34,7 +34,10 @@ appId: dev.turbolite.example
 - assertVisible: "Submitting item=Towels"
 - assertVisible: "Saved by Stream"
 - assertVisible: "Towels"
-- assertVisible: "Unknown wrappers keep their children."
+- scrollUntilVisible:
+    element:
+      text: "Unknown wrappers keep their children."
+    direction: DOWN
 - assertVisible:
     id: "last-error-unknown-element"
 - scrollUntilVisible:
