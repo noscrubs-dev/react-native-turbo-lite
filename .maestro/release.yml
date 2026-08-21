@@ -50,7 +50,10 @@ appId: dev.turbolite.example
 - tapOn: "Run GET form"
 - assertVisible: "GET form result"
 - back
-- assertVisible: "Home document"
+- scrollUntilVisible:
+    element:
+      text: "Home document"
+    direction: UP
 - scrollUntilVisible:
     element:
       text: "Create order"
@@ -63,6 +66,9 @@ appId: dev.turbolite.example
 - assertVisible:
     id: "request-count-8"
 - back
-- assertVisible: "Home document"
+- scrollUntilVisible:
+    element:
+      text: "Home document"
+    direction: UP
 - assertVisible:
     id: "request-count-8"
