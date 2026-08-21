@@ -41,6 +41,100 @@ later prop changes do not create another history entry. A successful link or
 full-document form submission calls `navigation.push`. A Turbo refresh calls
 `navigation.replace`. Frame requests never change native history.
 
+### Expo Router without a special adapter
+
+```tsx
+import { type Href, router, usePathname } from "expo-router"
+
+const apiOrigin = "https://app.example.com"
+const appHref = (url: string) => {
+  const parsed = new URL(url)
+  return `${parsed.pathname}${parsed.search}` as Href
+}
+const navigation = {
+  push: (url: string) => router.push(appHref(url)),
+  replace: (url: string) => router.replace(appHref(url)),
+}
+
+export default function TurboRoute() {
+  const pathname = usePathname()
+  const documentUrl = new URL(pathname, apiOrigin).href
+  return (
+    <TurboLiteProvider {...{ navigation }} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
+      <TurboLiteScreen url={documentUrl} />
+    </TurboLiteProvider>
+  )
+}
+```
+
+If the document identity includes query parameters, include the route's current
+search params in `documentUrl`. Expo Router's `push` adds a stack entry and
+`replace` does not. See its [navigation guide](https://docs.expo.dev/router/basics/navigation/).
+
+### React Navigation without a special adapter
+
+```tsx
+import {
+  type RouteProp,
+  StackActions,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native"
+
+type Routes = { TurboDocument: { url: string } }
+
+function TurboRoute() {
+  const host = useNavigation()
+  const route = useRoute<RouteProp<Routes, "TurboDocument">>()
+  const navigation = useMemo(() => ({
+    push: (url: string) => host.dispatch(StackActions.push("TurboDocument", { url })),
+    replace: (url: string) => host.dispatch(StackActions.replace("TurboDocument", { url })),
+  }), [host])
+
+  return (
+    <TurboLiteProvider {...{ navigation }} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
+      <TurboLiteScreen url={route.params.url} />
+    </TurboLiteProvider>
+  )
+}
+```
+
+Use a stack or native-stack navigator. React Navigation documents that `push`
+always adds a route, including another route with the same name. See its
+[stack actions](https://reactnavigation.org/docs/stack-actions/).
+
+### React Router on web without a special adapter
+
+```tsx
+import { useLocation, useNavigate } from "react-router"
+
+const appPath = (url: string) => {
+  const parsed = new URL(url)
+  return `${parsed.pathname}${parsed.search}`
+}
+
+function TurboRoute() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const navigation = useMemo(() => ({
+    push: (url: string) => navigate(appPath(url)),
+    replace: (url: string) => navigate(appPath(url), { replace: true }),
+  }), [navigate])
+
+  return (
+    <TurboLiteProvider {...{ navigation }} baseUrl={apiOrigin} fetch={authenticatedFetch} renderer={renderer}>
+      <TurboLiteScreen url={`${location.pathname}${location.search}`} />
+    </TurboLiteProvider>
+  )
+}
+```
+
+These three integrations intentionally ignore the optional prepared document.
+They need no Turbo Lite router package: source screens and Back stay correct,
+and each pushed destination performs one GET.
+
+### Optional exact response handoff
+
 For a full-document push, Turbo Lite does not commit the response into the
 cached source screen. It supplies the already parsed response as the optional
 second argument to `push`:
