@@ -2,7 +2,7 @@
   "expo": {
     "name": "Turbo Lite Release Example",
     "slug": "react-native-turbo-lite-example",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router"],

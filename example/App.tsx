@@ -162,7 +162,19 @@ async function demoFetch(input: string, init: RequestInit): Promise<Response> {
       { headers: { "Content-Type": "text/vnd.turbo-stream.html" } },
     );
   }
-  const body = documents[url.pathname] ?? documents["/details"];
+  const documentPath = url.pathname.startsWith("/screens")
+    ? url.pathname.slice("/screens".length) || "/"
+    : url.pathname;
+  if (
+    init.method === "GET" &&
+    ["/", "/details", "/search", "/orders/42"].includes(url.pathname)
+  ) {
+    return new Response("Route documents require the /screens namespace", {
+      headers: { "Content-Type": "text/plain" },
+      status: 404,
+    });
+  }
+  const body = documents[documentPath] ?? documents["/details"];
   return new Response(body, { headers: { "Content-Type": "text/html" } });
 }
 

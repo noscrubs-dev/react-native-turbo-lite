@@ -29,6 +29,7 @@ import type {
 
 const STREAM_MEDIA_TYPE = "text/vnd.turbo-stream.html";
 const VISIT_MEDIA_TYPE = "application/vnd.turbo-lite.visit+json";
+const ROUTER_DOCUMENT_URL = Symbol("TurboLiteRouterDocumentUrl");
 const DOCUMENT_MEDIA_TYPES = new Set([
   "application/xhtml+xml",
   "application/xml",
@@ -95,7 +96,12 @@ function asError(error: unknown, url: string): TurboLiteError {
 interface RequestTarget {
   frame?: string;
   method: "get" | "post";
+  routeUrl?: string;
 }
+
+type InternalRuntimeOptions = TurboLiteRuntimeOptions & {
+  [ROUTER_DOCUMENT_URL]?: string;
+};
 
 interface VisitDirective {
   action: "push" | "replace";
@@ -132,6 +138,8 @@ export class TurboLiteRuntime {
   #nextRequest = 0;
   #nextNavigation = 0;
   #activeNavigation: number | undefined;
+  readonly #routeDocumentUrl: string | undefined;
+  #documentRequestUrl = "";
   #documentGeneration = 0;
   #tree: InternalNode | undefined;
   #snapshot: TurboLiteSnapshot = {
@@ -144,6 +152,9 @@ export class TurboLiteRuntime {
   #disposed = false;
 
   constructor(options: TurboLiteRuntimeOptions) {
+    this.#routeDocumentUrl = (options as InternalRuntimeOptions)[
+      ROUTER_DOCUMENT_URL
+    ];
     this.#options = { ...options, limits: resolveLimits(options.limits) };
   }
 
@@ -156,7 +167,39 @@ export class TurboLiteRuntime {
 
   /** Load the document owned by a mounted native route. */
   async load(input: string): Promise<void> {
-    await this.visit(input, { history: "none" });
+    const documentInput = this.#routeDocumentUrl ?? input;
+    let routeUrl: string;
+    let documentUrl: string;
+    try {
+      routeUrl = this.#resolve(input);
+      documentUrl = this.#resolve(documentInput);
+    } catch (error) {
+      this.#report(error, documentInput);
+      return;
+    }
+    if (
+      this.#tree !== undefined &&
+      routeUrl === this.#snapshot.url &&
+      documentUrl === (this.#documentRequestUrl || routeUrl)
+    ) {
+      return;
+    }
+    await this.#request(
+      documentUrl,
+      {
+        headers: {
+          Accept:
+            this.#options.navigation === undefined
+              ? "text/html, application/xhtml+xml"
+              : `${VISIT_MEDIA_TYPE}, text/html, application/xhtml+xml`,
+        },
+        method: "GET",
+      },
+      {
+        method: "get",
+        ...(routeUrl === documentUrl ? {} : { routeUrl }),
+      },
+    );
   }
 
   #emit(): void {
@@ -610,13 +653,13 @@ export class TurboLiteRuntime {
       }
       const directive = this.#parseVisitDirective(
         markup,
-        finalUrl,
+        target.routeUrl ?? finalUrl,
         target.method === "get" ? "replace" : "push",
         target.method === "get" ? "replace" : undefined,
       );
       if (
         target.method === "get" &&
-        sameDocumentUrl(directive.location, finalUrl)
+        sameDocumentUrl(directive.location, target.routeUrl ?? finalUrl)
       ) {
         throw new TurboLiteError(
           "http",
@@ -697,7 +740,12 @@ export class TurboLiteRuntime {
         await this.#commitDocument(parsed, sourceUrl, true);
         return;
       }
-      await this.#commitDocument(parsed, finalUrl, true);
+      await this.#commitDocument(
+        parsed,
+        target.routeUrl ?? finalUrl,
+        true,
+        finalUrl,
+      );
     }
     if (target.frame !== undefined)
       await this.#applyStreams(parsed.streams, finalUrl);
@@ -813,6 +861,7 @@ export class TurboLiteRuntime {
     parsed: ParsedDocument,
     url: string,
     keepCurrentDocumentRequest = false,
+    documentRequestUrl?: string,
   ): Promise<void> {
     this.#documentGeneration++;
     for (const [slot, request] of this.#requests) {
@@ -826,6 +875,8 @@ export class TurboLiteRuntime {
     this.#preparedFrames.clear();
     this.#frameStates.clear();
     this.#tree = parsed.tree;
+    if (documentRequestUrl !== undefined)
+      this.#documentRequestUrl = documentRequestUrl;
     this.#syncFrames();
     this.#snapshot = {
       ...this.#snapshot,
@@ -876,8 +927,10 @@ export class TurboLiteRuntime {
     }
     if (changed) this.#scheduleEagerFrames();
     if (refresh) {
+      const routeUrl = this.#snapshot.url;
+      const documentUrl = this.#documentRequestUrl || routeUrl;
       await this.#request(
-        this.#snapshot.url,
+        documentUrl,
         {
           headers: {
             Accept:
@@ -887,7 +940,10 @@ export class TurboLiteRuntime {
           },
           method: "GET",
         },
-        { method: "get" },
+        {
+          method: "get",
+          ...(routeUrl === documentUrl ? {} : { routeUrl }),
+        },
       );
     }
   }
@@ -995,6 +1051,18 @@ export class TurboLiteRuntime {
     this.#preparedFrames.clear();
     this.#listeners.clear();
   }
+}
+
+/** Internal factory used by first-party route bindings with a separate GET URL. */
+export function createTurboLiteRouterRuntime(
+  options: TurboLiteRuntimeOptions,
+  documentUrl: string | undefined,
+): TurboLiteRuntime {
+  if (documentUrl === undefined) return new TurboLiteRuntime(options);
+  return new TurboLiteRuntime({
+    ...options,
+    [ROUTER_DOCUMENT_URL]: documentUrl,
+  } as InternalRuntimeOptions);
 }
 
 function encodeEntries(entries: readonly FormEntry[]): string {

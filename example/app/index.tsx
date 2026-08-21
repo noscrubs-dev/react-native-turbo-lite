@@ -1,1 +1,5 @@
-export { TurboLiteExpoIndexRoute as default } from "react-native-turbo-lite/expo-router";
+import { TurboLiteExpoIndexRoute } from "react-native-turbo-lite/expo-router";
+
+export default function IndexRoute() {
+  return <TurboLiteExpoIndexRoute documentBasePath="/screens" />;
+}

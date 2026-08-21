@@ -43,6 +43,10 @@ release work, read [references/testing.md](references/testing.md).
   visit directive. Native GET redirects use a direct `replace` directive before
   document loading; never commit a followed document and then replace. Frames,
   refresh, and preload never mutate native history.
+- In Expo Router, use `documentBasePath` only when a visible route such as
+  `/cart` must load its document from a static endpoint such as `/screens/cart`.
+  The hidden prefix belongs only to route-owned GETs and refresh; never add it
+  to router history, links, forms, Frames, or visit directives.
 - Put app authentication, tenant headers, retries, telemetry, and connectivity
   policy in the fetch adapter. Return ordinary `Response` objects, including
   valid 422 document responses.

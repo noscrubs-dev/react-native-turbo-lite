@@ -6,6 +6,7 @@ import {
   TurboLiteError,
   TurboLiteRuntime,
 } from "../src/index.js";
+import { createTurboLiteRouterRuntime } from "../src/runtime.js";
 import { deferred, nodeById, response, textContent } from "./helpers.js";
 
 const page = (text: string) =>
@@ -138,6 +139,123 @@ describe("TurboLiteRuntime requests", () => {
     await canonical.load("/orders/1");
     expect(textContent(canonical.getSnapshot().tree)).toBe("Canonical");
     expect(canonicalFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a logical route URL while loading and refreshing a separate document URL", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          `${page("Cart")}<turbo-stream action="refresh"></turbo-stream>`,
+        ),
+      )
+      .mockResolvedValueOnce(response(page("Refreshed cart")));
+    const runtime = createTurboLiteRouterRuntime(
+      {
+        baseUrl: "https://app.test/",
+        fetch,
+        navigation: { push() {}, replace() {} },
+      },
+      "/screens/cart",
+    );
+
+    await runtime.load("/cart");
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "https://app.test/screens/cart",
+      "https://app.test/screens/cart",
+    ]);
+    expect(runtime.getSnapshot().url).toBe("https://app.test/cart");
+    expect(textContent(runtime.getSnapshot().tree)).toBe("Refreshed cart");
+  });
+
+  it("does not apply a document path prefix to links, forms, or Frames", async () => {
+    const push = vi.fn();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          '<Screen><turbo-frame id="offers" src="offers" loading="lazy"><Text>Old</Text></turbo-frame></Screen>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        response('<turbo-frame id="offers"><Text>Offers</Text></turbo-frame>'),
+      );
+    const runtime = createTurboLiteRouterRuntime(
+      {
+        baseUrl: "https://app.test/",
+        fetch,
+        navigation: { push, replace() {} },
+      },
+      "/screens/cart",
+    );
+
+    await runtime.load("/cart");
+    await runtime.visit("checkout");
+    await runtime.submit({
+      action: "search",
+      entries: [["q", "pickup"]],
+      method: "get",
+    });
+    await runtime.loadFrame("offers");
+
+    expect(push.mock.calls.map(([url]) => url)).toEqual([
+      "https://app.test/checkout",
+      "https://app.test/search?q=pickup",
+    ]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "https://app.test/screens/cart",
+      "https://app.test/offers",
+    ]);
+  });
+
+  it("resolves a document GET visit directive against the logical route URL", async () => {
+    const replace = vi.fn();
+    const runtime = createTurboLiteRouterRuntime(
+      {
+        baseUrl: "https://app.test/",
+        fetch: async () =>
+          response('{"location":"canonical"}', {
+            contentType: "application/vnd.turbo-lite.visit+json",
+          }),
+        navigation: { push() {}, replace },
+      },
+      "/screens/cart",
+    );
+
+    await runtime.load("/cart");
+
+    expect(replace).toHaveBeenCalledWith("https://app.test/canonical");
+  });
+
+  it("keeps unsafe-form actions and visit directives on the logical route namespace", async () => {
+    const push = vi.fn();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Cart")))
+      .mockResolvedValueOnce(
+        response('{"location":"/orders/42"}', {
+          contentType: "application/vnd.turbo-lite.visit+json",
+        }),
+      );
+    const runtime = createTurboLiteRouterRuntime(
+      {
+        baseUrl: "https://app.test/",
+        fetch,
+        navigation: { push, replace() {} },
+      },
+      "/screens/cart",
+    );
+
+    await runtime.load("/cart");
+    await runtime.submit({ action: "orders", entries: [], method: "post" });
+
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "https://app.test/screens/cart",
+      "https://app.test/orders",
+    ]);
+    expect(push).toHaveBeenCalledWith("https://app.test/orders/42");
   });
 
   it("rejects push in a top-level GET visit directive", async () => {

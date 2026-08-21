@@ -201,6 +201,111 @@ describe("first-party router bindings", () => {
     );
   });
 
+  it("keeps the Expo route visible while loading from a separate document path", async () => {
+    routerMocks.expoParams = {
+      "#": "summary",
+      __turboLitePath: ["cart"],
+      q: ["wash", "fold"],
+    };
+    const fetch = vi.fn(async () =>
+      response(
+        '<Screen><a href="checkout"><LinkButton>Checkout</LinkButton></a></Screen>',
+      ),
+    );
+
+    renderRoute(
+      <TurboLiteExpoRoute basePath="/shop/" documentBasePath="/screens/" />,
+      fetch,
+    );
+    await screen.findByText("Checkout");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://app.test/screens/shop/cart?q=wash&q=fold#summary",
+      expect.objectContaining({ method: "GET" }),
+    );
+
+    fireEvent.click(screen.getByText("Checkout"));
+    expect(routerMocks.expoPush).toHaveBeenCalledWith("/shop/checkout");
+    expect(routerMocks.expoPush).not.toHaveBeenCalledWith(
+      expect.stringContaining("/screens"),
+    );
+  });
+
+  it("uses the separate document path for the Expo index route", async () => {
+    routerMocks.expoParams = { turbo: ["1", "2"] };
+    const fetch = vi.fn(async () =>
+      response("<Screen><Text>Root document</Text></Screen>"),
+    );
+
+    renderRoute(
+      <TurboLiteExpoIndexRoute documentBasePath="/screens/" />,
+      fetch,
+    );
+    await screen.findByText("Root document");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://app.test/screens?turbo=1&turbo=2",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("keeps a prefixed document GET redirect out of Expo history", async () => {
+    routerMocks.expoParams = { __turboLitePath: ["cart"] };
+    const fetch = vi.fn(async () =>
+      response('{"location":"canonical"}', {
+        contentType: "application/vnd.turbo-lite.visit+json",
+      }),
+    );
+
+    renderRoute(<TurboLiteExpoRoute documentBasePath="/screens" />, fetch);
+    await waitFor(() =>
+      expect(routerMocks.expoReplace).toHaveBeenCalledWith("/canonical"),
+    );
+    expect(routerMocks.expoPush).not.toHaveBeenCalled();
+  });
+
+  it("pushes a same-URL Expo entry without exposing the document prefix", async () => {
+    routerMocks.expoParams = { __turboLitePath: ["cart"] };
+    const fetch = vi.fn(async () =>
+      response(
+        '<Screen><a href="/cart"><LinkButton>Open cart again</LinkButton></a></Screen>',
+      ),
+    );
+
+    renderRoute(<TurboLiteExpoRoute documentBasePath="/screens" />, fetch);
+    await screen.findByText("Open cart again");
+    fireEvent.click(screen.getByText("Open cart again"));
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://app.test/screens/cart",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(routerMocks.expoPush).toHaveBeenCalledWith("/cart");
+  });
+
+  it.each([
+    "/screens?tenant=1",
+    "/screens#content",
+    "https://app.test/screens",
+    "//app.test/screens",
+    "/screens/../admin",
+    "/screens/%2e%2e/admin",
+    "/screens//tenant",
+    "/screens\\tenant",
+    "/screens/[tenant]",
+    "/screens/:tenant",
+    "/screens/*",
+  ])("rejects an unsafe Expo documentBasePath: %s", (documentBasePath) => {
+    const fetch = vi.fn(async () =>
+      response("<Screen><Text>Unused</Text></Screen>"),
+    );
+    expect(() =>
+      renderRoute(
+        <TurboLiteExpoRoute documentBasePath={documentBasePath} />,
+        fetch,
+      ),
+    ).toThrow("documentBasePath must be a static absolute path");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("pushes the same React Navigation Stack route with serializable URL params", async () => {
     routerMocks.reactNavigationRoute = {
       key: "turbo-7",

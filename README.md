@@ -47,10 +47,42 @@ document URL. Put these routes only in the URL space Rails owns. Static Expo
 routes continue to win over the catch-all. `__turboLitePath` is the reserved
 catch-all parameter name; other query parameters are preserved.
 
-For a static Rails-owned prefix, wrap both route components with the same
-`basePath`, for example `<TurboLiteExpoRoute basePath="/server" />`. Dynamic
-parent routes are not supported by this binding because Expo combines their
-path params with query params.
+`basePath` is the visible Expo route prefix. For example,
+`<TurboLiteExpoRoute basePath="/server" />` serves `/server/cart` and requests
+the document from `/server/cart`.
+
+When the visible route and Rails document endpoint differ, add
+`documentBasePath`:
+
+```tsx
+// app/index.tsx
+import { TurboLiteExpoIndexRoute } from "react-native-turbo-lite/expo-router"
+
+export default function IndexRoute() {
+  return <TurboLiteExpoIndexRoute documentBasePath="/screens" />
+}
+
+// app/[...__turboLitePath].tsx
+import { TurboLiteExpoRoute } from "react-native-turbo-lite/expo-router"
+
+export default function DocumentRoute() {
+  return <TurboLiteExpoRoute documentBasePath="/screens" />
+}
+```
+
+Now `/cart?mode=pickup#summary` fetches
+`/screens/cart?mode=pickup#summary`, while links, forms, redirects, reload,
+Back, and Expo history continue to use `/cart`. The document prefix applies
+only to the route-owned document GET and Stream refresh; it does not rewrite
+form actions or Frame `src` URLs.
+
+Both prefix props accept only a static absolute path. Trailing slashes are
+normalized; query, hash, protocol, duplicate slash, and dot-segment values are
+rejected. They compose when both are present: `basePath="/admin"
+documentBasePath="/screens"` keeps `/admin/users` visible and fetches
+`/screens/admin/users`. Dynamic parent routes are not supported because Expo
+combines their path params with query params. A path on
+`TurboLiteProvider.baseUrl` is not a replacement for either prefix.
 
 ### React Navigation
 

@@ -26,6 +26,7 @@ Rails response, and a device screenshot does not prove cancellation races.
 | Initial screen | One fetch; no native push/replace |
 | User link | One push before fetch; destination GETs once; native Back returns to the retained source |
 | Router bindings | Expo Router, React Navigation, and React Router use only public router state and URL-only entries |
+| Expo document prefix | Visible URL, push/replace, Back, links, forms, and Frames omit the prefix; mount and refresh GET the prefixed path with repeated query and hash intact |
 | Native GET redirect | Direct replace directive; canonical route GETs once; followed document fails closed |
 | Refresh | Current document reloads in place; no duplicate Back entry |
 | Eager Frame | Automatic request with matching `Turbo-Frame` header |

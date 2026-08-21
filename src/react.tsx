@@ -12,7 +12,7 @@ import {
 } from "react";
 import { TurboLiteError, UnknownElementError } from "./errors.js";
 import { elementChildren, type InternalNode, isElement } from "./internal.js";
-import { TurboLiteRuntime } from "./runtime.js";
+import { createTurboLiteRouterRuntime, TurboLiteRuntime } from "./runtime.js";
 import { normalizeTagName } from "./tags.js";
 import type {
   FormEntry,
@@ -148,13 +148,21 @@ export function TurboLiteScreen({ url }: TurboLiteScreenProps): ReactNode {
 
 /** Internal seam used by the first-party router entrypoints. */
 export function TurboLiteRouterScreen({
+  documentUrl,
   navigation,
   url,
 }: {
+  documentUrl?: string;
   navigation: TurboLiteNavigationAdapter;
   url: string;
 }): ReactNode {
-  return <TurboLiteConfiguredScreen navigation={navigation} url={url} />;
+  return (
+    <TurboLiteConfiguredScreen
+      {...(documentUrl === undefined ? {} : { documentUrl })}
+      navigation={navigation}
+      url={url}
+    />
+  );
 }
 
 /** Internal provider seam used by the first-party router entrypoints. */
@@ -169,22 +177,27 @@ export function useTurboLiteProviderBaseUrl(): string {
 }
 
 function TurboLiteConfiguredScreen({
+  documentUrl,
   navigation,
   url,
 }: TurboLiteScreenProps & {
+  documentUrl?: string;
   navigation?: TurboLiteNavigationAdapter;
 }): ReactNode {
   const config = useProvider();
   const runtime = useMemo(
     () =>
-      new TurboLiteRuntime({
-        fetch: config.fetch,
-        ...(config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl }),
-        ...(config.limits === undefined ? {} : { limits: config.limits }),
-        ...(navigation === undefined ? {} : { navigation }),
-        ...(config.onError === undefined ? {} : { onError: config.onError }),
-      }),
-    [config, navigation],
+      createTurboLiteRouterRuntime(
+        {
+          fetch: config.fetch,
+          ...(config.baseUrl === undefined ? {} : { baseUrl: config.baseUrl }),
+          ...(config.limits === undefined ? {} : { limits: config.limits }),
+          ...(navigation === undefined ? {} : { navigation }),
+          ...(config.onError === undefined ? {} : { onError: config.onError }),
+        },
+        documentUrl,
+      ),
+    [config, documentUrl, navigation],
   );
   const snapshot = useSyncExternalStore(
     runtime.subscribe,

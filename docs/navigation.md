@@ -21,10 +21,51 @@ root URL. Keep both inside the part of the route tree owned by Rails documents.
 Static Expo routes continue to take precedence. Reserve `__turboLitePath` for
 the catch-all route parameter; every other query parameter is preserved.
 
-For a static prefix such as `app/server`, wrap both components and pass
-`basePath="/server"`. Turbo Lite then requests `/server/...`. Dynamic parent
-routes are not supported by this binding because Expo exposes their path params
-in the same local object as query params.
+`basePath` describes the visible static Expo route prefix. With
+`basePath="/server"`, the route `/server/cart` requests `/server/cart`.
+
+Use `documentBasePath` when Rails serves the same document from a different
+path:
+
+```tsx
+// app/index.tsx
+import { TurboLiteExpoIndexRoute } from "react-native-turbo-lite/expo-router"
+
+export default function IndexRoute() {
+  return <TurboLiteExpoIndexRoute documentBasePath="/screens" />
+}
+
+// app/[...__turboLitePath].tsx
+import { TurboLiteExpoRoute } from "react-native-turbo-lite/expo-router"
+
+export default function DocumentRoute() {
+  return <TurboLiteExpoRoute documentBasePath="/screens" />
+}
+```
+
+The visible route `/cart?mode=pickup#summary` performs its route-owned GET at
+`/screens/cart?mode=pickup#summary`. The runtime still resolves document links,
+GET and unsafe form actions, Frame `src` values, visit directives, and Back
+against `/cart`; `/screens` never enters router history. A Stream refresh
+repeats the route-owned GET at `/screens/cart` without adding history.
+
+Use both props when needed:
+
+```tsx
+<TurboLiteExpoRoute
+  basePath="/server"
+  documentBasePath="/screens"
+/>
+```
+
+This displays `/server/cart` while requesting `/screens/server/cart`. The
+document prefix is added before the complete visible pathname, so separate
+`/admin` and `/store` mounts remain distinct on the server. Both values must be
+static absolute paths. Trailing slashes are normalized; query, hash, protocol,
+duplicate slash, and dot-segment values are rejected. A path in
+`TurboLiteProvider.baseUrl` follows normal URL resolution and is not a route or
+document prefix. Dynamic parent routes remain unsupported because Expo exposes
+their path params in the same local object as query params.
 
 ### React Navigation
 
@@ -57,7 +98,7 @@ destination on another origin.
 
 | Event | Document | Router history |
 | --- | --- | --- |
-| Route mount, deep link, reload | Destination performs one GET | No extra entry |
+| Route mount, deep link, reload | Destination performs one route-owned GET, using `documentBasePath` when configured | No extra entry |
 | Back | Retained native entries resume; other routers GET the prior URL | No extra entry |
 | User follows a full-document link | Destination performs one GET | `push` |
 | Full-document GET form succeeds | Destination performs one GET | `push` |
@@ -65,7 +106,7 @@ destination on another origin.
 | Unsafe form returns a visit directive | Destination performs one GET | Directive action |
 | Unsafe form returns a `422` document | Errors render on the source route | No change |
 | Turbo Stream or Frame response | Current route updates | No change |
-| Turbo Stream refresh | Current document reloads in place | No change |
+| Turbo Stream refresh | Current route-owned document GET repeats in place | No change |
 | Unsafe form, Frame, or refresh returns `204` | Current document stays visible | No change |
 | Route-owned document GET returns `204` | Rejected and reported; route has no committed document | Already-pushed entry remains |
 

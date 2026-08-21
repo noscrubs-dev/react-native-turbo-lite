@@ -26,10 +26,11 @@ function appendValues(
   }
 }
 
-function expoDocumentUrl(
+function expoRouteUrl(
   params: Record<string, ExpoRouteValue>,
   pathParameter?: string,
-  basePath?: string,
+  pathPrefix?: string,
+  property = "basePath",
 ): string {
   const pathValue =
     pathParameter === undefined ? undefined : params[pathParameter];
@@ -38,7 +39,7 @@ function expoDocumentUrl(
     : pathValue === undefined
       ? []
       : [pathValue];
-  const prefix = expoBasePath(basePath);
+  const prefix = expoPathPrefix(pathPrefix, property);
   const suffix = segments
     .map((segment) => encodeURIComponent(segment))
     .join("/");
@@ -58,37 +59,81 @@ function expoDocumentUrl(
   return `${pathname}${query.length === 0 ? "" : `?${query}`}${hash}`;
 }
 
-function expoBasePath(value: string | undefined): string {
+function expoPathPrefix(value: string | undefined, property: string): string {
   if (value === undefined || value === "" || value === "/") return "";
-  let parsed: URL;
-  try {
-    parsed = new URL(value, "https://turbo-lite.invalid");
-  } catch (cause) {
-    throw new Error(
-      "Turbo Lite Expo Router basePath must be an absolute path",
-      {
-        cause,
-      },
-    );
-  }
+  const message = `Turbo Lite Expo Router ${property} must be a static absolute path without query, hash, dot segments, or duplicate slashes`;
   if (
     !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("?") ||
+    value.includes("#") ||
+    value.includes("\\")
+  ) {
+    throw new Error(message);
+  }
+  const normalized = value.replace(/\/+$/, "");
+  if (normalized.includes("//")) throw new Error(message);
+  for (const segment of normalized.split("/").slice(1)) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      throw new Error(message);
+    }
+    if (
+      decoded === "." ||
+      decoded === ".." ||
+      decoded.startsWith(":") ||
+      decoded.includes("[") ||
+      decoded.includes("]") ||
+      decoded.includes("{") ||
+      decoded.includes("}") ||
+      decoded.includes("*") ||
+      decoded.includes("/") ||
+      decoded.includes("\\")
+    ) {
+      throw new Error(message);
+    }
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized, "https://turbo-lite.invalid");
+  } catch (cause) {
+    throw new Error(message, { cause });
+  }
+  if (
     parsed.origin !== "https://turbo-lite.invalid" ||
     parsed.search !== "" ||
-    parsed.hash !== ""
+    parsed.hash !== "" ||
+    parsed.pathname !== normalized
   ) {
-    throw new Error("Turbo Lite Expo Router basePath must be an absolute path");
+    throw new Error(message);
   }
-  return parsed.pathname.replace(/\/+$/, "");
+  return normalized;
+}
+
+function expoDocumentRequestUrl(
+  routeUrl: string,
+  documentBasePath: string,
+): string {
+  const prefix = expoPathPrefix(documentBasePath, "documentBasePath");
+  if (prefix === "") return routeUrl;
+  const suffixIndex = routeUrl.search(/[?#]/);
+  const pathname = suffixIndex < 0 ? routeUrl : routeUrl.slice(0, suffixIndex);
+  const queryAndHash = suffixIndex < 0 ? "" : routeUrl.slice(suffixIndex);
+  return `${prefix}${pathname === "/" ? "" : pathname}${queryAndHash}`;
 }
 
 export interface TurboLiteExpoRouteProps {
   /** Static URL prefix containing the route, for example `/server`. */
   basePath?: string;
+  /** Static backend path prefix used only for route-owned document GETs. */
+  documentBasePath?: string;
 }
 
 function ExpoRoute({
   basePath,
+  documentBasePath,
   pathParameter,
 }: TurboLiteExpoRouteProps & { pathParameter?: string }) {
   const baseUrl = useTurboLiteRouterBaseUrl();
@@ -96,7 +141,11 @@ function ExpoRoute({
   const routeNavigation = useNavigation();
   const router = useRouter();
   const navigationLocked = useRef(false);
-  const url = expoDocumentUrl(params, pathParameter, basePath);
+  const url = expoRouteUrl(params, pathParameter, basePath);
+  const documentUrl =
+    documentBasePath === undefined
+      ? url
+      : expoDocumentRequestUrl(url, documentBasePath);
   useFocusEffect(
     useCallback(() => {
       navigationLocked.current = false;
@@ -134,20 +183,21 @@ function ExpoRoute({
     }),
     [navigate],
   );
-  return <TurboLiteRouterScreen navigation={navigation} url={url} />;
+  return (
+    <TurboLiteRouterScreen
+      documentUrl={documentUrl}
+      navigation={navigation}
+      url={url}
+    />
+  );
 }
 
 /** Route component for the Expo Router `app/index.tsx` route. */
-export function TurboLiteExpoIndexRoute({ basePath }: TurboLiteExpoRouteProps) {
-  return <ExpoRoute {...(basePath === undefined ? {} : { basePath })} />;
+export function TurboLiteExpoIndexRoute(props: TurboLiteExpoRouteProps) {
+  return <ExpoRoute {...props} />;
 }
 
 /** Route component for an Expo Router `app/[...__turboLitePath].tsx` route. */
-export function TurboLiteExpoRoute({ basePath }: TurboLiteExpoRouteProps) {
-  return (
-    <ExpoRoute
-      pathParameter="__turboLitePath"
-      {...(basePath === undefined ? {} : { basePath })}
-    />
-  );
+export function TurboLiteExpoRoute(props: TurboLiteExpoRouteProps) {
+  return <ExpoRoute pathParameter="__turboLitePath" {...props} />;
 }

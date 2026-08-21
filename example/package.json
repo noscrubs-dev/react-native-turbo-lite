@@ -17,7 +17,7 @@
     "react": "19.2.3",
     "react-native": "0.86.2",
     "react-native-reanimated": "4.5.1",
-    "react-native-turbo-lite": "file:../react-native-turbo-lite-0.2.0.tgz",
+    "react-native-turbo-lite": "file:../react-native-turbo-lite-0.3.0.tgz",
     "react-native-worklets": "0.10.1"
   },
   "devDependencies": {

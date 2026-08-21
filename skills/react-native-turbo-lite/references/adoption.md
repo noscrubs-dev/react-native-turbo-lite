@@ -74,9 +74,24 @@ export { TurboLiteExpoIndexRoute as default } from "react-native-turbo-lite/expo
 export { TurboLiteExpoRoute as default } from "react-native-turbo-lite/expo-router"
 ```
 
-For a static nested URL prefix, wrap both components with the same `basePath`.
-Dynamic Expo parent routes are unsupported by this binding because their path
-params collide with query-param reconstruction.
+`basePath` is the visible static Expo route prefix. If Rails serves the same
+route document from a separate path, pass `documentBasePath` to both wrappers:
+
+```tsx
+export default function TurboRoute() {
+  return <TurboLiteExpoRoute documentBasePath="/screens" />
+}
+```
+
+This keeps `/cart` in Expo history while its route-owned document GET and
+Stream refresh use `/screens/cart`. Links, form actions, Frame `src` values,
+visit directives, and Back remain relative to `/cart`; do not manually rewrite
+them. Both props must be static absolute paths without query, hash, protocol,
+duplicate slashes, or dot segments. They compose: `basePath="/admin"
+documentBasePath="/screens"` keeps `/admin/users` visible and fetches
+`/screens/admin/users`. Do not use a path on `baseUrl` as a prefix substitute.
+Dynamic Expo parent routes are unsupported because their path params collide
+with query-param reconstruction.
 
 Keep the adapter identities stable. In the current React surface, changing the
 provider configuration creates a new Screen runtime. An inline `onError`,

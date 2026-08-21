@@ -18,4 +18,6 @@ bun run android
 
 Protocol edge cases and failure races stay in the faster unit and React
 integration suites. The Android Maestro flow covers the public package and
-native runtime boundary on the release runner.
+native runtime boundary on the release runner. Route documents are fetched
+through `documentBasePath="/screens"`; the fixture rejects unprefixed route
+document GETs while Frame and form endpoints remain unprefixed.
