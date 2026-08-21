@@ -9,7 +9,7 @@ appId: dev.turbolite.example
 - assertVisible: "Details document"
 - assertVisible:
     id: "request-count-3"
-- tapOn: "Back"
+- back
 - assertVisible: "Home document"
 - assertVisible:
     id: "request-count-3"
@@ -46,7 +46,7 @@ appId: dev.turbolite.example
 - hideKeyboard
 - tapOn: "Run GET form"
 - assertVisible: "GET form result"
-- tapOn: "Back"
+- back
 - assertVisible: "Home document"
 - scrollUntilVisible:
     element:
@@ -59,7 +59,7 @@ appId: dev.turbolite.example
 - assertVisible: "Order 42"
 - assertVisible:
     id: "request-count-8"
-- tapOn: "Back"
+- back
 - assertVisible: "Home document"
 - assertVisible:
     id: "request-count-8"
