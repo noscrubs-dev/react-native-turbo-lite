@@ -195,3 +195,20 @@ one stack, requests may overlap, and browser history may be serialized. Binding
 an opaque response to the correct future entry would require application-owned
 tokens or a shadow history store. Turbo Lite avoids that failure mode. Router
 entries carry only URLs, and each destination performs one predictable GET.
+
+## Explicit document refresh
+
+`await runtime.refresh()` repeats the current document GET in place.
+`useTurboLiteRefresh()` exposes the same operation inside a screen. The request
+uses the stored document URL, so Expo `documentBasePath` and query parameters
+remain intact. No push or replace occurs. Stream refresh uses the same method.
+The latest request wins. Errors use `onError` and retain the last document;
+the returned promise waits for handling but does not indicate success.
+
+## Changelog
+
+**2026-10-15**:
+
+- Changed: Added explicit document refresh through the runtime and React hook.
+- Why: Same-route navigation does not fetch the latest server document.
+- Impact: Hosts can recover stale state without changing history or remounting the Provider. No server migration is needed.

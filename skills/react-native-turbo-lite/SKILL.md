@@ -63,6 +63,10 @@ from `react-native-turbo-lite/expo-router`, `/react-navigation`, and
 - `useTurboLiteLink()` inside an `<a>` boundary.
 - `useTurboLiteField(name)` and `useTurboLiteForm()` inside a `<form>`.
 - `useTurboLiteFrame()` inside a `<turbo-frame>`.
+- `useTurboLiteRefresh()` inside a screen for an explicit document refresh.
+  It preserves the document prefix and native history. Await request handling;
+  failures use `onError`. Direct runtime users can call `runtime.refresh()` after
+  loading a document. Do not use same-route navigation as a refresh.
 
 Use `useTurboLiteRuntime()` or `TurboLiteRuntime` only when the host genuinely
 needs custom orchestration. If constructing a runtime directly, subscribe to

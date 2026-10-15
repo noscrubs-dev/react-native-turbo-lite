@@ -31,3 +31,6 @@ tests in this repository.
 | Browser DOM/events, scripts, HTML repair | Not supported | Hardened small node parser |
 | Page snapshots, page prefetch, scroll/focus restoration | Not supported | Destination documents load from their route; speculative page prefetch remains host-owned |
 | Expo Router, React Navigation, React Router | Optional | First-party bindings; none is required by the core runtime |
+
+Explicit document refresh is supported through `runtime.refresh()` and
+`useTurboLiteRefresh()`. It does not change native history.

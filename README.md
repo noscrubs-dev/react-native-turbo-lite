@@ -153,6 +153,15 @@ inside the corresponding element and use its hook:
 Those four hooks cover the normal component integration points. Advanced hosts
 can use `useTurboLiteRuntime()` directly.
 
+For an explicit document refresh, call `const refresh = useTurboLiteRefresh()`
+inside a mapped screen component, then `await refresh()`. This calls
+`runtime.refresh()` and repeats the current document GET, including any
+`documentBasePath` and query parameters, without changing native history or
+remounting the Provider. It does not refresh automatically on focus or app return.
+Awaiting it waits for request handling; errors go to `onError`, and the last
+successful document remains visible. Local input follows the existing document
+replacement rules. Direct runtime users must load a document before refreshing.
+
 ## Lazy Frames and preloading
 
 Frames without `loading`, or with `loading="eager"`, load automatically. A lazy
@@ -208,7 +217,7 @@ and lazy Frames, preloading, GET and POST forms, Streams, and error reporting.
 - `createComponentRenderer`, `normalizeTagName`
 - `useTurboLiteLink`, `useTurboLiteField`, `useTurboLiteForm`,
   `useTurboLiteFrame`
-- `TurboLiteRuntime`, `useTurboLiteRuntime`
+- `TurboLiteRuntime`, `useTurboLiteRuntime`, `useTurboLiteRefresh`
 - Typed errors and adapter, Frame, node, limit, and request types
 - `parseDocument` and `parseStreamResponse` for protocol tooling
 

@@ -28,7 +28,7 @@ Rails response, and a device screenshot does not prove cancellation races.
 | Router bindings | Expo Router, React Navigation, and React Router use only public router state and URL-only entries |
 | Expo document prefix | Visible URL, push/replace, Back, links, forms, and Frames omit the prefix; mount and refresh GET the prefixed path with repeated query and hash intact |
 | Native GET redirect | Direct replace directive; canonical route GETs once; followed document fails closed |
-| Refresh | Current document reloads in place; no duplicate Back entry |
+| Refresh | Explicit runtime/hook and Stream refresh reload in place; preserve document prefix and query; no push/replace; errors retain UI; latest request wins |
 | Eager Frame | Automatic request with matching `Turbo-Frame` header |
 | Lazy Frame | No request before visibility; load after visibility |
 | Preload | UI/history unchanged; later load makes no second request |

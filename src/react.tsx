@@ -116,6 +116,12 @@ export function useTurboLiteRuntime(): TurboLiteRuntime {
   return runtime;
 }
 
+/** Refresh the enclosing screen without remounting it or changing history. */
+export function useTurboLiteRefresh(): () => Promise<void> {
+  const runtime = useTurboLiteRuntime();
+  return useCallback(() => runtime.refresh(), [runtime]);
+}
+
 export function useTurboLiteFrame(): TurboLiteFrameController {
   const runtime = useContext(RuntimeContext);
   const frameId = useContext(FrameContext);

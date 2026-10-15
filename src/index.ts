@@ -16,6 +16,7 @@ export {
   useTurboLiteForm,
   useTurboLiteFrame,
   useTurboLiteLink,
+  useTurboLiteRefresh,
   useTurboLiteRuntime,
 } from "./react.js";
 export { TurboLiteRuntime } from "./runtime.js";

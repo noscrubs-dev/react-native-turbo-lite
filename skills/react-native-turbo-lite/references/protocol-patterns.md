@@ -116,7 +116,11 @@ Turbo Lite supports same-response Stream actions targeting exact IDs:
 Keep IDs unique and stable within the active tree. Missing targets are typed
 diagnostics and no-ops. Siblings apply in source order; a later failure does not
 roll back earlier committed sibling actions. `refresh` reloads the current
-runtime in place without changing native history.
+runtime in place without changing native history. For explicit recovery, call
+`useTurboLiteRefresh()` inside a screen, or `runtime.refresh()` after loading a
+document. These use the same request path as Stream refresh, including any
+hidden document prefix. Errors use `onError`; awaiting refresh waits for request
+handling, not guaranteed success.
 
 Action Cable, WebSockets, CSS selectors, morphing, permanent elements, and
 custom actions are not implemented.

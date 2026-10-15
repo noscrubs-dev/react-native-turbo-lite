@@ -13,6 +13,82 @@ const page = (text: string) =>
   `<Screen id="page"><Text>${text}</Text></Screen>`;
 
 describe("TurboLiteRuntime requests", () => {
+  it("refreshes the same URL and reports failures without discarding the document", async () => {
+    const onError = vi.fn();
+    const push = vi.fn();
+    const replace = vi.fn();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Version 1")))
+      .mockResolvedValueOnce(response(page("Version 2")))
+      .mockRejectedValueOnce(new Error("Offline"));
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+      onError,
+      navigation: { push, replace },
+    });
+    await runtime.load("/cart?cart_id=123");
+    await runtime.refresh();
+    expect(textContent(runtime.getSnapshot().tree)).toBe("Version 2");
+    await runtime.refresh();
+    expect(textContent(runtime.getSnapshot().tree)).toBe("Version 2");
+    expect(runtime.getSnapshot().pending).toBe(false);
+    expect(runtime.getSnapshot().url).toBe("https://app.test/cart?cart_id=123");
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+      Array(3).fill("https://app.test/cart?cart_id=123"),
+    );
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("keeps the latest refresh when an older response arrives later", async () => {
+    const older = deferred<Response>();
+    const newer = deferred<Response>();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(page("Initial")))
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+    });
+    await runtime.load("/cart");
+    const first = runtime.refresh();
+    const firstSignal = fetch.mock.calls[1]?.[1]?.signal;
+    expect(runtime.getSnapshot().pending).toBe(true);
+    const second = runtime.refresh();
+    expect(firstSignal?.aborted).toBe(true);
+    newer.resolve(response(page("Latest")));
+    await second;
+    older.resolve(response(page("Old")));
+    await first;
+    expect(textContent(runtime.getSnapshot().tree)).toBe("Latest");
+    expect(runtime.getSnapshot().pending).toBe(false);
+  });
+
+  it("reports refresh before load and does not request after disposal", async () => {
+    const fetch = vi.fn();
+    const onError = vi.fn();
+    const runtime = new TurboLiteRuntime({
+      baseUrl: "https://app.test",
+      fetch,
+      onError,
+    });
+    await runtime.refresh();
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Cannot refresh before a document loads",
+      }),
+    );
+    runtime.dispose();
+    await runtime.refresh();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
   it("pushes a full-document GET before fetching and lets the destination perform the sole GET", async () => {
     const push = vi.fn();
     const replace = vi.fn();

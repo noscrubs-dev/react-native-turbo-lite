@@ -54,6 +54,7 @@ for (const name of [
   "TurboLiteScreen",
   "createComponentRenderer",
   "useTurboLiteFrame",
+  "useTurboLiteRefresh",
 ]) {
   if (!(name in root)) throw new Error(`Built entrypoint is missing ${name}`);
 }

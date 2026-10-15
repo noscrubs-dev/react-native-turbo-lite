@@ -84,7 +84,7 @@ export default function TurboRoute() {
 ```
 
 This keeps `/cart` in Expo history while its route-owned document GET and
-Stream refresh use `/screens/cart`. Links, form actions, Frame `src` values,
+Stream or explicit refresh use `/screens/cart`. Links, form actions, Frame `src` values,
 visit directives, and Back remain relative to `/cart`; do not manually rewrite
 them. Both props must be static absolute paths without query, hash, protocol,
 duplicate slashes, or dot segments. They compose: `basePath="/admin"

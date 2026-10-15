@@ -16,6 +16,7 @@ import {
   createComponentRenderer,
   TurboLiteProvider,
   useTurboLiteLink,
+  useTurboLiteRefresh,
 } from "../src/index.js";
 import { TurboLiteReactNavigationRoute } from "../src/react-navigation.js";
 import { TurboLiteReactRouterRoute } from "../src/react-router.js";
@@ -89,6 +90,15 @@ function LinkButton({ children }: { children?: ReactNode }) {
   );
 }
 
+function RefreshButton() {
+  const refresh = useTurboLiteRefresh();
+  return (
+    <button type="button" onClick={() => void refresh()}>
+      Refresh
+    </button>
+  );
+}
+
 function passthrough(type: string): ComponentType<Record<string, unknown>> {
   return function Passthrough({ children }) {
     return createElement(
@@ -102,6 +112,7 @@ function passthrough(type: string): ComponentType<Record<string, unknown>> {
 const renderer = createComponentRenderer({
   components: {
     LinkButton: LinkButton as ComponentType<Record<string, unknown>>,
+    RefreshButton,
     Screen: passthrough("screen"),
     Text: passthrough("text"),
   },
@@ -260,6 +271,32 @@ describe("first-party router bindings", () => {
       expect(routerMocks.expoReplace).toHaveBeenCalledWith("/canonical"),
     );
     expect(routerMocks.expoPush).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the prefixed Expo document through the public hook without navigation", async () => {
+    routerMocks.expoParams = {
+      __turboLitePath: ["cart", "checkout"],
+      cart_id: "123",
+      q: ["wash", "fold"],
+      "#": "summary",
+    };
+    const document = (version: number) =>
+      `<Screen><Text>Version ${version}</Text><RefreshButton /></Screen>`;
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(document(1)))
+      .mockResolvedValueOnce(response(document(2)));
+    renderRoute(<TurboLiteExpoRoute documentBasePath="/screens" />, fetch);
+    await screen.findByText("Version 1");
+    fireEvent.click(screen.getByText("Refresh"));
+    await screen.findByText("Version 2");
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(
+      Array(2).fill(
+        "https://app.test/screens/cart/checkout?cart_id=123&q=wash&q=fold#summary",
+      ),
+    );
+    expect(routerMocks.expoPush).not.toHaveBeenCalled();
+    expect(routerMocks.expoReplace).not.toHaveBeenCalled();
   });
 
   it("pushes a same-URL Expo entry without exposing the document prefix", async () => {

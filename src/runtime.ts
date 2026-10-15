@@ -202,6 +202,36 @@ export class TurboLiteRuntime {
     );
   }
 
+  /** Fetch the current document again without changing native history. */
+  async refresh(): Promise<void> {
+    if (this.#disposed) return;
+    if (this.#snapshot.url === "") {
+      this.#report(
+        new TurboLiteError("http", "Cannot refresh before a document loads"),
+        this.#snapshot.url,
+      );
+      return;
+    }
+    const routeUrl = this.#snapshot.url;
+    const documentUrl = this.#documentRequestUrl || routeUrl;
+    await this.#request(
+      documentUrl,
+      {
+        headers: {
+          Accept:
+            this.#options.navigation === undefined
+              ? "text/html, application/xhtml+xml"
+              : `${VISIT_MEDIA_TYPE}, text/html, application/xhtml+xml`,
+        },
+        method: "GET",
+      },
+      {
+        method: "get",
+        ...(routeUrl === documentUrl ? {} : { routeUrl }),
+      },
+    );
+  }
+
   #emit(): void {
     const frames = Object.fromEntries(this.#frameStates);
     const next: TurboLiteSnapshot = {
@@ -926,26 +956,7 @@ export class TurboLiteRuntime {
       this.#emit();
     }
     if (changed) this.#scheduleEagerFrames();
-    if (refresh) {
-      const routeUrl = this.#snapshot.url;
-      const documentUrl = this.#documentRequestUrl || routeUrl;
-      await this.#request(
-        documentUrl,
-        {
-          headers: {
-            Accept:
-              this.#options.navigation === undefined
-                ? "text/html, application/xhtml+xml"
-                : `${VISIT_MEDIA_TYPE}, text/html, application/xhtml+xml`,
-          },
-          method: "GET",
-        },
-        {
-          method: "get",
-          ...(routeUrl === documentUrl ? {} : { routeUrl }),
-        },
-      );
-    }
+    if (refresh) await this.refresh();
   }
 
   async #commitPreparedFrame(
